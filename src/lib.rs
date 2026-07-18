@@ -5,6 +5,8 @@ pub mod db;
 pub mod error;
 pub mod gateway;
 pub mod models;
+pub mod qr;
+pub mod seed;
 pub mod webhook;
 
 use std::sync::Arc;

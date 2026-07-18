@@ -28,6 +28,10 @@ pub enum AppError {
     Database(#[from] sqlx::Error),
     #[error("gateway error: {0}")]
     Gateway(String),
+    #[error("invoice invalid: {0}")]
+    InvoiceInvalid(String),
+    #[error("payload too large: {0}")]
+    PayloadTooLarge(String),
     #[error("internal error: {0}")]
     Internal(String),
 }
@@ -74,6 +78,8 @@ impl IntoResponse for AppError {
                 )
             }
             AppError::Gateway(msg) => (StatusCode::BAD_GATEWAY, "gateway_error", msg.clone()),
+            AppError::InvoiceInvalid(msg) => (StatusCode::PAYMENT_REQUIRED, "invoice_invalid", msg.clone()),
+            AppError::PayloadTooLarge(msg) => (StatusCode::PAYLOAD_TOO_LARGE, "payload_too_large", msg.clone()),
             AppError::Internal(msg) => (StatusCode::INTERNAL_SERVER_ERROR, "internal_error", msg.clone()),
         };
 

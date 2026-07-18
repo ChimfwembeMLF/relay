@@ -1,6 +1,19 @@
+use std::collections::HashMap;
 use std::env;
+use std::fs;
+use std::path::Path;
+
+use serde::Deserialize;
 
 use crate::error::AppError;
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct CountrySeedDefault {
+    pub currency: String,
+    pub amount: i64,
+}
+
+pub type WalletSeedDefaults = HashMap<String, CountrySeedDefault>;
 
 #[derive(Clone, Debug)]
 pub struct Config {
@@ -10,10 +23,14 @@ pub struct Config {
     pub pawapay_base_url: String,
     pub webhook_signing_secret: String,
     pub fallback_gateway: String,
+    pub invoice_pay_base_url: String,
+    pub wallet_seed_defaults: WalletSeedDefaults,
 }
 
 impl Config {
     pub fn from_env() -> Result<Self, AppError> {
+        let wallet_seed_defaults = load_wallet_seed_defaults()?;
+
         Ok(Self {
             database_url: env::var("DATABASE_URL")
                 .map_err(|_| AppError::Config("DATABASE_URL is required".into()))?,
@@ -28,6 +45,28 @@ impl Config {
                 .unwrap_or_else(|_| "dev-secret-change-me".into()),
             fallback_gateway: env::var("FALLBACK_GATEWAY")
                 .unwrap_or_else(|_| "pawapay".into()),
+            invoice_pay_base_url: env::var("INVOICE_PAY_BASE_URL")
+                .unwrap_or_else(|_| "http://localhost:8080".into()),
+            wallet_seed_defaults,
         })
     }
+}
+
+fn load_wallet_seed_defaults() -> Result<WalletSeedDefaults, AppError> {
+    if let Ok(json) = env::var("WALLET_SEED_DEFAULTS_JSON") {
+        return serde_json::from_str(&json)
+            .map_err(|e| AppError::Config(format!("invalid WALLET_SEED_DEFAULTS_JSON: {e}")));
+    }
+
+    let path = env::var("WALLET_SEED_DEFAULTS_PATH")
+        .unwrap_or_else(|_| "config/wallet_seed_defaults.json".into());
+
+    if Path::new(&path).exists() {
+        let content = fs::read_to_string(&path)
+            .map_err(|e| AppError::Config(format!("failed to read {path}: {e}")))?;
+        return serde_json::from_str(&content)
+            .map_err(|e| AppError::Config(format!("invalid wallet seed defaults file: {e}")));
+    }
+
+    Ok(HashMap::new())
 }
