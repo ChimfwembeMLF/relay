@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://relay.internal/schemas/webhook-payment-event/v1",
+  "title": "PaymentRelayWebhookEvent",
+  "description": "Payload POSTed to system webhook_url on terminal payment status",
+  "type": "object",
+  "required": [
+    "event",
+    "payment_id",
+    "system_id",
+    "external_id",
+    "status",
+    "amount",
+    "currency",
+    "country",
+    "timestamp"
+  ],
+  "properties": {
+    "event": {
+      "type": "string",
+      "const": "payment.status_changed"
+    },
+    "payment_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Relay transaction ID"
+    },
+    "system_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "external_id": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["completed", "failed"]
+    },
+    "amount": {
+      "type": "integer",
+      "description": "Minor units"
+    },
+    "currency": {
+      "type": "string"
+    },
+    "country": {
+      "type": "string"
+    },
+    "gateway_reference": {
+      "type": ["string", "null"]
+    },
+    "error": {
+      "type": ["string", "null"]
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "examples": [
+    {
+      "event": "payment.status_changed",
+      "payment_id": "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+      "system_id": "550e8400-e29b-41d4-a716-446655440000",
+      "external_id": "ECO_550e_20260718_ABC123",
+      "status": "completed",
+      "amount": 1999,
+      "currency": "USD",
+      "country": "US",
+      "gateway_reference": "f4401bd2-1568-4140-bf2d-eb77d2b2b639",
+      "error": null,
+      "timestamp": "2026-07-18T21:00:00Z"
+    }
+  ]
+}

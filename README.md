@@ -1,5 +1,22 @@
 # Payment Relay System - Simple Internal System Requirements
 
+## Implementation (Rust)
+
+The spec-driven implementation lives in this repository:
+
+```bash
+cp .env.example .env
+docker compose up -d postgres
+cargo run
+```
+
+- **Spec & plan**: `specs/001-payment-relay/`
+- **API contract**: `specs/001-payment-relay/contracts/openapi.yaml`
+- **Validation guide**: `specs/001-payment-relay/quickstart.md`
+- **Tests**: `DATABASE_URL=postgres://relay:relay@localhost:5432/payment_relay cargo test`
+
+---
+
 Got it! You want a **lightweight internal payment relay** for your own systems, not a multi-tenant SaaS. Let me strip it down to **just what you need**.
 
 ---

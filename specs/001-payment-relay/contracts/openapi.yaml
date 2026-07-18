@@ -1,0 +1,367 @@
+openapi: 3.1.0
+info:
+  title: Payment Relay API
+  version: 0.1.0
+  description: Internal payment relay for registered systems — register, pay, query wallets.
+
+servers:
+  - url: http://localhost:8080
+    description: Local development
+
+tags:
+  - name: systems
+  - name: payments
+  - name: wallets
+
+paths:
+  /systems:
+    post:
+      tags: [systems]
+      summary: Register an internal system
+      operationId: createSystem
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSystemRequest'
+      responses:
+        '201':
+          description: System created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateSystemResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: Prefix already exists
+
+  /systems/{id}:
+    get:
+      tags: [systems]
+      summary: Get system by ID
+      operationId: getSystem
+      parameters:
+        - $ref: '#/components/parameters/SystemId'
+      responses:
+        '200':
+          description: System details (no API key)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemPublic'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /payments:
+    post:
+      tags: [payments]
+      summary: Process a payment
+      operationId: processPayment
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProcessPaymentRequest'
+      responses:
+        '200':
+          description: Payment result (including idempotent replay)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProcessPaymentResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          description: Insufficient wallet balance
+        '403':
+          description: Country not enabled for system
+        '409':
+          description: Idempotency key reused with different request body
+
+  /payments/{id}:
+    get:
+      tags: [payments]
+      summary: Get payment by relay ID
+      operationId: getPayment
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Payment details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProcessPaymentResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /wallets/{system_id}:
+    get:
+      tags: [wallets]
+      summary: List wallets for a system
+      operationId: listWallets
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/SystemId'
+      responses:
+        '200':
+          description: Wallet list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Wallet'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: API key does not match system_id
+
+  /transactions/{system_id}:
+    get:
+      tags: [payments]
+      summary: List transactions for a system
+      operationId: listTransactions
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/SystemId'
+        - name: external_id
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            maximum: 100
+      responses:
+        '200':
+          description: Transaction history
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Transaction'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+
+  parameters:
+    SystemId:
+      name: system_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  responses:
+    BadRequest:
+      description: Validation error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unauthorized:
+      description: Missing or invalid API key
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  schemas:
+    CreateSystemRequest:
+      type: object
+      required: [name, prefix, enabled_countries]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        prefix:
+          type: string
+          pattern: '^[A-Z0-9]{2,8}$'
+        enabled_countries:
+          type: array
+          minItems: 1
+          items:
+            type: string
+            pattern: '^[A-Z]{2}$'
+        webhook_url:
+          type: string
+          format: uri
+
+    CreateSystemResponse:
+      type: object
+      required: [id, name, prefix, api_key]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        prefix:
+          type: string
+        api_key:
+          type: string
+          description: Returned once at registration; store securely
+
+    SystemPublic:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        prefix:
+          type: string
+        enabled_countries:
+          type: array
+          items:
+            type: string
+        webhook_url:
+          type: string
+          nullable: true
+
+    PaymentMethod:
+      type: object
+      required: [type, details]
+      properties:
+        type:
+          type: string
+          enum: [mmo, card, bank]
+        details:
+          type: object
+          additionalProperties: true
+          description: Gateway-specific tokenized details
+
+    ProcessPaymentRequest:
+      type: object
+      required:
+        - system_id
+        - external_id
+        - amount
+        - currency
+        - country
+        - payment_method
+        - idempotency_key
+      properties:
+        system_id:
+          type: string
+          format: uuid
+        external_id:
+          type: string
+        amount:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Amount in minor units (cents)
+        currency:
+          type: string
+          pattern: '^[A-Z]{3}$'
+        country:
+          type: string
+          pattern: '^[A-Z]{2}$'
+        payment_method:
+          $ref: '#/components/schemas/PaymentMethod'
+        idempotency_key:
+          type: string
+          maxLength: 255
+
+    ProcessPaymentResponse:
+      type: object
+      required: [id, external_id, status]
+      properties:
+        id:
+          type: string
+          format: uuid
+        external_id:
+          type: string
+        status:
+          type: string
+          enum: [pending, completed, failed]
+        gateway_reference:
+          type: string
+          nullable: true
+        error:
+          type: string
+          nullable: true
+
+    Wallet:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        system_id:
+          type: string
+          format: uuid
+        country:
+          type: string
+        currency:
+          type: string
+        balance:
+          type: integer
+          format: int64
+
+    Transaction:
+      allOf:
+        - $ref: '#/components/schemas/ProcessPaymentResponse'
+        - type: object
+          properties:
+            system_id:
+              type: string
+              format: uuid
+            amount:
+              type: integer
+            currency:
+              type: string
+            country:
+              type: string
+            gateway:
+              type: string
+            created_at:
+              type: string
+              format: date-time
+
+    Error:
+      type: object
+      required: [error, message]
+      properties:
+        error:
+          type: string
+        message:
+          type: string
