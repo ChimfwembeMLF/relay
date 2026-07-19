@@ -24,10 +24,10 @@ Extends existing Rust project at repository root (`src/`, `migrations/`, `tests/
 
 **Purpose**: Migration, dependencies, and operator seed config file
 
-- [ ] T001 Add `qrcode`, `image`, and `csv` crates to `Cargo.toml`
-- [ ] T002 Create migration `migrations/002_invoices_and_seed_events.sql` (invoices, wallet_seed_events, alter transactions)
-- [ ] T003 [P] Create `config/wallet_seed_defaults.json` with ZM and US default entries
-- [ ] T004 [P] Extend `.env.example` with `INVOICE_PAY_BASE_URL`, `WALLET_SEED_DEFAULTS_PATH`, `WALLET_SEED_DEFAULTS_JSON`
+- [x] T001 Add `qrcode`, `image`, and `csv` crates to `Cargo.toml`
+- [x] T002 Create migration `migrations/002_invoices_and_seed_events.sql` (invoices, wallet_seed_events, alter transactions)
+- [x] T003 [P] Create `config/wallet_seed_defaults.json` with ZM and US default entries
+- [x] T004 [P] Extend `.env.example` with `INVOICE_PAY_BASE_URL`, `WALLET_SEED_DEFAULTS_PATH`, `WALLET_SEED_DEFAULTS_JSON`
 
 ---
 
@@ -37,15 +37,15 @@ Extends existing Rust project at repository root (`src/`, `migrations/`, `tests/
 
 **⚠️ CRITICAL**: No user story work until this phase is complete
 
-- [ ] T005 Extend `src/config.rs` to load wallet seed defaults and invoice pay base URL
-- [ ] T006 [P] Add Invoice, WalletSeedEvent, WalletSeedOverride, report DTO structs in `src/models.rs`
-- [ ] T007 [P] Create `src/seed/config.rs` with country→currency→amount resolution logic
-- [ ] T008 [P] Create `src/seed/mod.rs` exporting seed orchestration entry point
-- [ ] T009 [P] Create `src/qr/mod.rs` with PNG base64 QR generation from URL string
-- [ ] T010 Add `process_deposit()` to `PaymentGateway` trait in `src/gateway/traits.rs`
-- [ ] T011 Implement pawaPay deposit adapter (`POST /v2/deposits`) in `src/gateway/pawapay.rs`
-- [ ] T012 [P] Implement `process_deposit()` on `MockGateway` in `src/gateway/mock.rs`
-- [ ] T013 Register `seed` and `qr` modules in `src/lib.rs`
+- [x] T005 Extend `src/config.rs` to load wallet seed defaults and invoice pay base URL
+- [x] T006 [P] Add Invoice, WalletSeedEvent, WalletSeedOverride, report DTO structs in `src/models.rs`
+- [x] T007 [P] Create `src/seed/config.rs` with country→currency→amount resolution logic
+- [x] T008 [P] Create `src/seed/mod.rs` exporting seed orchestration entry point
+- [x] T009 [P] Create `src/qr/mod.rs` with PNG base64 QR generation from URL string
+- [x] T010 Add `process_deposit()` to `PaymentGateway` trait in `src/gateway/traits.rs`
+- [x] T011 Implement pawaPay deposit adapter (`POST /v2/deposits`) in `src/gateway/pawapay.rs`
+- [x] T012 [P] Implement `process_deposit()` on `MockGateway` in `src/gateway/mock.rs`
+- [x] T013 Register `seed` and `qr` modules in `src/lib.rs`
 
 **Checkpoint**: Foundation ready — user story implementation can begin
 
@@ -59,11 +59,11 @@ Extends existing Rust project at repository root (`src/`, `migrations/`, `tests/
 
 ### Implementation for User Story 1
 
-- [ ] T014 [P] [US1] Add `seed_wallets_for_system` and `record_wallet_seed_event` queries in `src/db/queries.rs`
-- [ ] T015 [US1] Implement `seed::seed_system_wallets()` transactional orchestration in `src/seed/mod.rs`
-- [ ] T016 [US1] Hook wallet seeding into `create_system` handler in `src/api/systems.rs` (same DB transaction)
-- [ ] T017 [US1] Add `wallets_seeded` count to `CreateSystemResponse` in `src/models.rs` and handler response
-- [ ] T018 [P] [US1] Add integration test in `tests/seed_on_register_test.rs`
+- [x] T014 [P] [US1] Add `seed_wallets_for_system` and `record_wallet_seed_event` queries in `src/db/queries.rs`
+- [x] T015 [US1] Implement `seed::seed_system_wallets()` transactional orchestration in `src/seed/mod.rs`
+- [x] T016 [US1] Hook wallet seeding into `create_system` handler in `src/api/systems.rs` (same DB transaction)
+- [x] T017 [US1] Add `wallets_seeded` count to `CreateSystemResponse` in `src/models.rs` and handler response
+- [x] T018 [P] [US1] Add integration test in `tests/seed_on_register_test.rs`
 
 **Checkpoint**: User Story 1 complete — zero manual SQL onboarding (SC-006)
 
@@ -77,10 +77,10 @@ Extends existing Rust project at repository root (`src/`, `migrations/`, `tests/
 
 ### Implementation for User Story 4
 
-- [ ] T019 [US4] Add optional `wallet_seeds` field to `CreateSystemRequest` in `src/models.rs`
-- [ ] T020 [US4] Merge override > default > zero fallback in `src/seed/config.rs`
-- [ ] T021 [US4] Validate override countries ⊆ `enabled_countries` in `src/api/systems.rs`
-- [ ] T022 [P] [US4] Add override precedence test cases to `tests/seed_on_register_test.rs`
+- [x] T019 [US4] Add optional `wallet_seeds` field to `CreateSystemRequest` in `src/models.rs`
+- [x] T020 [US4] Merge override > default > zero fallback in `src/seed/config.rs`
+- [x] T021 [US4] Validate override countries ⊆ `enabled_countries` in `src/api/systems.rs`
+- [x] T022 [P] [US4] Add override precedence test cases to `tests/seed_on_register_test.rs`
 
 **Checkpoint**: Seed configuration flexible without code changes
 
@@ -94,14 +94,14 @@ Extends existing Rust project at repository root (`src/`, `migrations/`, `tests/
 
 ### Implementation for User Story 2
 
-- [ ] T023 [P] [US2] Add invoice CRUD, expiry lazy-update, and status transition queries in `src/db/queries.rs`
-- [ ] T024 [P] [US2] Add `create_deposit_with_credit` atomic wallet credit + transaction insert in `src/db/queries.rs`
-- [ ] T025 [US2] Implement `POST /invoices`, `GET /invoices`, `GET /invoices/{reference}` in `src/api/invoices.rs`
-- [ ] T026 [US2] Implement `POST /invoices/{id}/collect` with deposit gateway call in `src/api/invoices.rs`
-- [ ] T027 [US2] Implement `POST /invoices/{id}/cancel` in `src/api/invoices.rs`
-- [ ] T028 [US2] Wire invoice routes in `src/api/routes.rs`
-- [ ] T029 [US2] Generate QR via `src/qr/mod.rs` on invoice create; store `qr_payload_url`
-- [ ] T030 [P] [US2] Add invoice lifecycle integration test in `tests/invoices_test.rs` (create, collect, expired, idempotent replay)
+- [x] T023 [P] [US2] Add invoice CRUD, expiry lazy-update, and status transition queries in `src/db/queries.rs`
+- [x] T024 [P] [US2] Add `create_deposit_with_credit` atomic wallet credit + transaction insert in `src/db/queries.rs`
+- [x] T025 [US2] Implement `POST /invoices`, `GET /invoices`, `GET /invoices/{reference}` in `src/api/invoices.rs`
+- [x] T026 [US2] Implement `POST /invoices/{id}/collect` with deposit gateway call in `src/api/invoices.rs`
+- [x] T027 [US2] Implement `POST /invoices/{id}/cancel` in `src/api/invoices.rs`
+- [x] T028 [US2] Wire invoice routes in `src/api/routes.rs`
+- [x] T029 [US2] Generate QR via `src/qr/mod.rs` on invoice create; store `qr_payload_url`
+- [x] T030 [P] [US2] Add invoice lifecycle integration test in `tests/invoices_test.rs` (create, collect, expired, idempotent replay)
 
 **Checkpoint**: Invoices + QR collection flow works end-to-end (SC-002)
 
@@ -115,12 +115,12 @@ Extends existing Rust project at repository root (`src/`, `migrations/`, `tests/
 
 ### Implementation for User Story 3
 
-- [ ] T031 [P] [US3] Add transaction summary/detail report queries in `src/db/queries.rs`
-- [ ] T032 [P] [US3] Add wallet balance + period delta report queries in `src/db/queries.rs`
-- [ ] T033 [P] [US3] Add invoice summary/detail report queries in `src/db/queries.rs`
-- [ ] T034 [US3] Implement `GET /reports/transactions`, `/reports/wallets`, `/reports/invoices` in `src/api/reports.rs`
-- [ ] T035 [US3] Wire report routes in `src/api/routes.rs`
-- [ ] T036 [P] [US3] Add report integration tests in `tests/reports_test.rs`
+- [x] T031 [P] [US3] Add transaction summary/detail report queries in `src/db/queries.rs`
+- [x] T032 [P] [US3] Add wallet balance + period delta report queries in `src/db/queries.rs`
+- [x] T033 [P] [US3] Add invoice summary/detail report queries in `src/db/queries.rs`
+- [x] T034 [US3] Implement `GET /reports/transactions`, `/reports/wallets`, `/reports/invoices` in `src/api/reports.rs`
+- [x] T035 [US3] Wire report routes in `src/api/routes.rs`
+- [x] T036 [P] [US3] Add report integration tests in `tests/reports_test.rs`
 
 **Checkpoint**: JSON reports available for finance reconciliation (SC-004)
 
@@ -134,10 +134,10 @@ Extends existing Rust project at repository root (`src/`, `migrations/`, `tests/
 
 ### Implementation for User Story 5
 
-- [ ] T037 [US5] Add CSV serialization helper in `src/api/reports.rs` using `csv` crate
-- [ ] T038 [US5] Support `format=csv` query param with `Content-Disposition` attachment on all report endpoints
-- [ ] T039 [US5] Enforce 10k row limit with clear error/pagination note in `src/api/reports.rs`
-- [ ] T040 [P] [US5] Add CSV column parity test in `tests/reports_test.rs`
+- [x] T037 [US5] Add CSV serialization helper in `src/api/reports.rs` using `csv` crate
+- [x] T038 [US5] Support `format=csv` query param with `Content-Disposition` attachment on all report endpoints
+- [x] T039 [US5] Enforce 10k row limit with clear error/pagination note in `src/api/reports.rs`
+- [x] T040 [P] [US5] Add CSV column parity test in `tests/reports_test.rs`
 
 **Checkpoint**: CSV exports match API detail data (SC-005)
 
@@ -147,10 +147,10 @@ Extends existing Rust project at repository root (`src/`, `migrations/`, `tests/
 
 **Purpose**: Logging, docs, quickstart validation
 
-- [ ] T041 [P] Add structured tracing for seed, invoice, and report handlers in `src/api/systems.rs`, `src/api/invoices.rs`, `src/api/reports.rs`
-- [ ] T042 Extend `specs/002-wallet-invoices-reports/contracts/openapi.yaml` if implementation diverges during build
-- [ ] T043 Run validation scenarios from `specs/002-wallet-invoices-reports/quickstart.md` and fix gaps
-- [ ] T044 [P] Update root `README.md` implementation section with invoices, seed config, and report endpoints
+- [x] T041 [P] Add structured tracing for seed, invoice, and report handlers in `src/api/systems.rs`, `src/api/invoices.rs`, `src/api/reports.rs`
+- [x] T042 Extend `specs/002-wallet-invoices-reports/contracts/openapi.yaml` if implementation diverges during build
+- [x] T043 Run validation scenarios from `specs/002-wallet-invoices-reports/quickstart.md` and fix gaps
+- [x] T044 [P] Update root `README.md` implementation section with invoices, seed config, and report endpoints
 
 ---
 

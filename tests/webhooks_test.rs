@@ -7,7 +7,6 @@ use payment_relay::auth::{generate_api_key, hash_api_key};
 use payment_relay::db::queries::{self, NewTransaction};
 use payment_relay::gateway::mock::MockGateway;
 use payment_relay::webhook::sender;
-use uuid::Uuid;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -62,6 +61,8 @@ async fn deliver_signed_webhook_on_payment() {
             gateway_reference: Some("ref-123"),
             gateway_status: Some("ACCEPTED"),
             error: None,
+            invoice_id: None,
+            direction: "payout",
         },
     )
     .await

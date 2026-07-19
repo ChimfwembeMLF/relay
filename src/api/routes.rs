@@ -8,7 +8,10 @@ use axum::{
 };
 use uuid::Uuid;
 
+use crate::api::invoices;
+use crate::api::pay_page;
 use crate::api::payments;
+use crate::api::reports;
 use crate::api::systems;
 use crate::api::wallets;
 use crate::auth::{hash_api_key, verify_api_key};
@@ -25,13 +28,21 @@ pub struct AuthenticatedSystem {
 pub fn create_router(state: AppState) -> Router {
     let public = Router::new()
         .route("/systems", post(systems::create_system))
-        .route("/systems/:id", get(systems::get_system));
+        .route("/systems/:id", get(systems::get_system))
+        .route("/pay/:reference", get(pay_page::show_pay_page).post(pay_page::submit_pay_page));
 
     let protected = Router::new()
         .route("/payments", post(payments::process_payment))
         .route("/payments/:id", get(payments::get_payment))
         .route("/wallets/:system_id", get(wallets::list_wallets))
         .route("/transactions/:system_id", get(payments::list_transactions))
+        .route("/invoices", post(invoices::create_invoice_handler).get(invoices::list_invoices_handler))
+        .route("/invoices/:reference", get(invoices::get_invoice_by_reference_handler))
+        .route("/invoices/:id/collect", post(invoices::collect_invoice))
+        .route("/invoices/:id/cancel", post(invoices::cancel_invoice_handler))
+        .route("/reports/transactions", get(reports::transactions_report))
+        .route("/reports/wallets", get(reports::wallets_report))
+        .route("/reports/invoices", get(reports::invoices_report))
         .route_layer(middleware::from_fn_with_state(state.clone(), auth_middleware));
 
     Router::new()

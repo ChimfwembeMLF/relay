@@ -5,7 +5,6 @@ use axum::http::{Request, StatusCode};
 use axum::Router;
 use payment_relay::api::routes::create_router;
 use payment_relay::config::Config;
-use payment_relay::gateway::mock::MockGateway;
 use payment_relay::gateway::PaymentGateway;
 use payment_relay::AppState;
 use tower::ServiceExt;
@@ -21,6 +20,11 @@ pub async fn setup_test_state(gateway: Arc<dyn PaymentGateway>) -> AppState {
         pawapay_base_url: "https://api.sandbox.pawapay.io".into(),
         webhook_signing_secret: "test-secret".into(),
         fallback_gateway: "mock".into(),
+        invoice_pay_base_url: "http://localhost:8080".into(),
+        wallet_seed_defaults: payment_relay::config::Config::from_env()
+            .map(|c| c.wallet_seed_defaults)
+            .unwrap_or_default(),
+        pay_page_rate_limit: 100,
     };
     AppState::new(config, gateway).await.expect("failed to create test state")
 }
@@ -41,6 +45,26 @@ pub async fn json_request(
     if let Some(key) = api_key {
         builder = builder.header("X-API-Key", key);
     }
+    let request = builder.body(Body::from(body.unwrap_or_default())).unwrap();
+    let response = app.clone().oneshot(request).await.unwrap();
+    let status = response.status();
+    let bytes = http_body_util::BodyExt::collect(response.into_body())
+        .await
+        .unwrap()
+        .to_bytes();
+    (status, String::from_utf8_lossy(&bytes).to_string())
+}
+
+pub async fn form_request(
+    app: &Router,
+    method: &str,
+    uri: &str,
+    body: Option<String>,
+) -> (StatusCode, String) {
+    let builder = Request::builder()
+        .method(method)
+        .uri(uri)
+        .header("Content-Type", "application/x-www-form-urlencoded");
     let request = builder.body(Body::from(body.unwrap_or_default())).unwrap();
     let response = app.clone().oneshot(request).await.unwrap();
     let status = response.status();

@@ -106,6 +106,8 @@ pub async fn process_payment(
                 gateway_reference: gateway_result.reference.as_deref(),
                 gateway_status: Some(&gateway_result.status),
                 error: gateway_result.error.as_deref(),
+                invoice_id: None,
+                direction: "payout",
             },
         )
         .await?
@@ -124,6 +126,8 @@ pub async fn process_payment(
             gateway_reference: gateway_result.reference.as_deref(),
             gateway_status: Some(&gateway_result.status),
             error: gateway_result.error.as_deref(),
+            invoice_id: None,
+            direction: "payout",
         };
         insert_failed_transaction(state.db.pool(), &tx).await?
     };
@@ -162,12 +166,12 @@ async fn insert_failed_transaction(
         INSERT INTO transactions (
             system_id, wallet_id, external_id, idempotency_key, request_hash,
             amount, currency, country, status, gateway, gateway_reference,
-            gateway_status, error
+            gateway_status, error, invoice_id, direction
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
         RETURNING id, system_id, wallet_id, external_id, idempotency_key, request_hash,
                   amount, currency, country, status, gateway, gateway_reference,
-                  gateway_status, error, created_at, updated_at
+                  gateway_status, error, invoice_id, direction, created_at, updated_at
         "#,
     )
     .bind(tx.system_id)
@@ -183,6 +187,8 @@ async fn insert_failed_transaction(
     .bind(tx.gateway_reference)
     .bind(tx.gateway_status)
     .bind(tx.error)
+    .bind(tx.invoice_id)
+    .bind(tx.direction)
     .fetch_one(pool)
     .await
     .map_err(AppError::from)

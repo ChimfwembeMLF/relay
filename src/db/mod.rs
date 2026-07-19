@@ -1,4 +1,7 @@
+pub mod invoices;
 pub mod queries;
+pub mod reports;
+pub mod wallet_seeds;
 
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;

@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pay Invoice</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 420px; margin: 2rem auto; padding: 0 1rem; color: #111; }
+    .amount { font-size: 2rem; font-weight: 700; margin: 0.5rem 0; }
+    .meta { color: #555; font-size: 0.95rem; margin-bottom: 1.5rem; }
+    label { display: block; margin-top: 1rem; font-weight: 600; }
+    input, select { width: 100%; padding: 0.65rem; margin-top: 0.35rem; font-size: 1rem; box-sizing: border-box; }
+    button { width: 100%; margin-top: 1.5rem; padding: 0.85rem; font-size: 1rem; background: #111; color: #fff; border: none; border-radius: 6px; cursor: pointer; }
+    .ref { font-size: 0.85rem; color: #777; margin-top: 2rem; }
+  </style>
+</head>
+<body>
+  <h1>Pay Invoice</h1>
+  <div class="amount">{{amount_display}}</div>
+  <div class="meta">{{description_line}}Expires: {{expires_at}}</div>
+  <form method="post" action="/pay/{{reference}}">
+    <label for="phone">Mobile number</label>
+    <input id="phone" name="phone" type="tel" required placeholder="260763456789">
+    <label for="provider">Provider</label>
+    <select id="provider" name="provider" required>{{provider_options}}</select>
+    <input type="hidden" name="idempotency_key" value="{{idempotency_key}}">
+    <input type="hidden" name="form_token" value="{{form_token}}">
+    <button type="submit">Pay now</button>
+  </form>
+  <p class="ref">Reference: {{reference}}</p>
+</body>
+</html>

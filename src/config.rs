@@ -25,6 +25,7 @@ pub struct Config {
     pub fallback_gateway: String,
     pub invoice_pay_base_url: String,
     pub wallet_seed_defaults: WalletSeedDefaults,
+    pub pay_page_rate_limit: u32,
 }
 
 impl Config {
@@ -48,6 +49,10 @@ impl Config {
             invoice_pay_base_url: env::var("INVOICE_PAY_BASE_URL")
                 .unwrap_or_else(|_| "http://localhost:8080".into()),
             wallet_seed_defaults,
+            pay_page_rate_limit: env::var("PAY_PAGE_RATE_LIMIT")
+                .unwrap_or_else(|_| "10".into())
+                .parse()
+                .map_err(|_| AppError::Config("PAY_PAGE_RATE_LIMIT must be a valid u32".into()))?,
         })
     }
 }

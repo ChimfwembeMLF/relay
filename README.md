@@ -6,14 +6,33 @@ The spec-driven implementation lives in this repository:
 
 ```bash
 cp .env.example .env
-docker compose up -d postgres
+docker compose up -d postgres   # or use local Postgres
 cargo run
 ```
 
-- **Spec & plan**: `specs/001-payment-relay/`
-- **API contract**: `specs/001-payment-relay/contracts/openapi.yaml`
-- **Validation guide**: `specs/001-payment-relay/quickstart.md`
+- **Feature 001 (payments)**: `specs/001-payment-relay/`
+- **Feature 003 (invoice pay page)**: `specs/003-invoice-pay-page/`
+- **API contracts**: `specs/001-payment-relay/contracts/openapi.yaml`, `specs/002-wallet-invoices-reports/contracts/openapi.yaml`
+- **Validation guides**: `specs/001-payment-relay/quickstart.md`, `specs/002-wallet-invoices-reports/quickstart.md`
 - **Tests**: `DATABASE_URL=postgres://relay:relay@localhost:5432/payment_relay cargo test`
+
+### Feature 002 endpoints
+
+| Endpoint | Description |
+|----------|-------------|
+| `POST /systems` | Registers a system and auto-seeds wallets from `config/wallet_seed_defaults.json` (optional `wallet_seeds` overrides) |
+| `POST /invoices` | Creates a pay-in invoice with QR URL and base64 PNG |
+| `GET /invoices` | Lists invoices (optional `?status=open`) |
+| `GET /invoices/{reference}` | Lookup invoice by reference |
+| `POST /invoices/{id}/collect` | Collect payment via pawaPay deposit; credits wallet |
+| `POST /invoices/{id}/cancel` | Cancel an open invoice |
+| `GET /reports/transactions` | Transaction summary by date range (`?format=csv&detail=true` for CSV) |
+| `GET /reports/wallets` | Wallet balances and period deltas (`?format=csv`) |
+| `GET /reports/invoices` | Invoice summary by date range (`?format=csv`) |
+| `GET /pay/{reference}` | Public HTML pay page (from invoice QR links) |
+| `POST /pay/{reference}` | Submit mobile-money payment from pay page |
+
+Configure wallet seed defaults via `WALLET_SEED_DEFAULTS_PATH` or `WALLET_SEED_DEFAULTS_JSON`, set `INVOICE_PAY_BASE_URL` for QR payment links, and `PAY_PAGE_RATE_LIMIT` for POST rate limiting.
 
 ---
 

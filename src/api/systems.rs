@@ -8,6 +8,7 @@ use crate::auth::{generate_api_key, hash_api_key};
 use crate::db::queries;
 use crate::error::AppError;
 use crate::models::{CreateSystemRequest, CreateSystemResponse, SystemPublic};
+use crate::seed::seed_system_wallets_in_tx;
 use crate::AppState;
 
 pub async fn create_system(
@@ -23,8 +24,10 @@ pub async fn create_system(
     let api_key = generate_api_key();
     let api_key_hash = hash_api_key(&api_key);
 
-    let system = queries::create_system(
-        state.db.pool(),
+    let mut tx = state.db.pool().begin().await?;
+
+    let system = queries::create_system_in_tx(
+        &mut tx,
         &req.name,
         &req.prefix,
         &req.enabled_countries,
@@ -33,13 +36,30 @@ pub async fn create_system(
     )
     .await?;
 
-    tracing::info!(system_id = %system.id, prefix = %system.prefix, "system registered");
+    let wallets_seeded = seed_system_wallets_in_tx(
+        &mut tx,
+        system.id,
+        &req.enabled_countries,
+        &state.config.wallet_seed_defaults,
+        &req.wallet_seeds,
+    )
+    .await?;
+
+    tx.commit().await?;
+
+    tracing::info!(
+        system_id = %system.id,
+        prefix = %system.prefix,
+        wallets_seeded = wallets_seeded,
+        "system registered with seeded wallets"
+    );
 
     Ok(Json(CreateSystemResponse {
         id: system.id,
         name: system.name,
         prefix: system.prefix,
         api_key,
+        wallets_seeded,
     }))
 }
 

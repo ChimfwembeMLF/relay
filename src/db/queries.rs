@@ -38,6 +38,32 @@ pub async fn create_system(
     Ok(system)
 }
 
+pub async fn create_system_in_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    name: &str,
+    prefix: &str,
+    enabled_countries: &[String],
+    webhook_url: Option<&str>,
+    api_key_hash: &str,
+) -> Result<System, AppError> {
+    let system = sqlx::query_as::<_, System>(
+        r#"
+        INSERT INTO systems (name, prefix, enabled_countries, webhook_url, api_key_hash)
+        VALUES ($1, $2, $3, $4, $5)
+        RETURNING id, name, prefix, enabled_countries, webhook_url, api_key_hash, created_at, updated_at
+        "#,
+    )
+    .bind(name)
+    .bind(prefix)
+    .bind(enabled_countries)
+    .bind(webhook_url)
+    .bind(api_key_hash)
+    .fetch_one(&mut **tx)
+    .await?;
+
+    Ok(system)
+}
+
 pub async fn get_system_by_id(pool: &PgPool, id: Uuid) -> Result<System, AppError> {
     sqlx::query_as::<_, System>(
         r#"
@@ -122,7 +148,7 @@ pub async fn get_transaction_by_idempotency(
         r#"
         SELECT id, system_id, wallet_id, external_id, idempotency_key, request_hash,
                amount, currency, country, status, gateway, gateway_reference,
-               gateway_status, error, created_at, updated_at
+               gateway_status, error, invoice_id, direction, created_at, updated_at
         FROM transactions
         WHERE system_id = $1 AND idempotency_key = $2
         "#,
@@ -143,7 +169,7 @@ pub async fn get_transaction_by_id(
         r#"
         SELECT id, system_id, wallet_id, external_id, idempotency_key, request_hash,
                amount, currency, country, status, gateway, gateway_reference,
-               gateway_status, error, created_at, updated_at
+               gateway_status, error, invoice_id, direction, created_at, updated_at
         FROM transactions
         WHERE id = $1 AND system_id = $2
         "#,
@@ -166,7 +192,7 @@ pub async fn list_transactions_by_system(
             r#"
             SELECT id, system_id, wallet_id, external_id, idempotency_key, request_hash,
                    amount, currency, country, status, gateway, gateway_reference,
-                   gateway_status, error, created_at, updated_at
+                   gateway_status, error, invoice_id, direction, created_at, updated_at
             FROM transactions
             WHERE system_id = $1 AND external_id = $2
             ORDER BY created_at DESC
@@ -184,7 +210,7 @@ pub async fn list_transactions_by_system(
             r#"
             SELECT id, system_id, wallet_id, external_id, idempotency_key, request_hash,
                    amount, currency, country, status, gateway, gateway_reference,
-                   gateway_status, error, created_at, updated_at
+                   gateway_status, error, invoice_id, direction, created_at, updated_at
             FROM transactions
             WHERE system_id = $1
             ORDER BY created_at DESC
@@ -213,6 +239,8 @@ pub struct NewTransaction<'a> {
     pub gateway_reference: Option<&'a str>,
     pub gateway_status: Option<&'a str>,
     pub error: Option<&'a str>,
+    pub invoice_id: Option<Uuid>,
+    pub direction: &'a str,
 }
 
 pub async fn create_transaction_with_debit(
@@ -244,12 +272,12 @@ pub async fn create_transaction_with_debit(
         INSERT INTO transactions (
             system_id, wallet_id, external_id, idempotency_key, request_hash,
             amount, currency, country, status, gateway, gateway_reference,
-            gateway_status, error
+            gateway_status, error, invoice_id, direction
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
         RETURNING id, system_id, wallet_id, external_id, idempotency_key, request_hash,
                   amount, currency, country, status, gateway, gateway_reference,
-                  gateway_status, error, created_at, updated_at
+                  gateway_status, error, invoice_id, direction, created_at, updated_at
         "#,
     )
     .bind(tx.system_id)
@@ -265,6 +293,8 @@ pub async fn create_transaction_with_debit(
     .bind(tx.gateway_reference)
     .bind(tx.gateway_status)
     .bind(tx.error)
+    .bind(tx.invoice_id)
+    .bind(tx.direction)
     .fetch_one(&mut *conn)
     .await?;
 
@@ -297,12 +327,13 @@ pub async fn record_webhook_attempt(
     status_code: Option<i32>,
     success: bool,
     error: Option<&str>,
+    event_type: &str,
 ) -> Result<(), AppError> {
     sqlx::query(
         r#"
         INSERT INTO webhook_delivery_attempts
-            (transaction_id, attempt_number, url, status_code, success, error)
-        VALUES ($1, $2, $3, $4, $5, $6)
+            (transaction_id, attempt_number, url, status_code, success, error, event_type)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
         "#,
     )
     .bind(transaction_id)
@@ -311,6 +342,7 @@ pub async fn record_webhook_attempt(
     .bind(status_code)
     .bind(success)
     .bind(error)
+    .bind(event_type)
     .execute(pool)
     .await?;
     Ok(())

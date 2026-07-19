@@ -8,7 +8,7 @@ use sha2::Sha256;
 
 use crate::db::queries;
 use crate::error::AppError;
-use crate::models::Transaction;
+use crate::models::{Invoice, Transaction};
 use crate::AppState;
 
 type HmacSha256 = Hmac<Sha256>;
@@ -28,16 +28,24 @@ struct WebhookPayload<'a> {
     timestamp: String,
 }
 
+#[derive(Serialize)]
+struct InvoiceWebhookPayload<'a> {
+    event: &'static str,
+    invoice_id: uuid::Uuid,
+    reference: &'a str,
+    amount: i64,
+    currency: &'a str,
+    country: &'a str,
+    status: &'static str,
+    transaction_id: uuid::Uuid,
+    timestamp: String,
+}
+
 pub async fn deliver_payment_webhook(
     state: &AppState,
     url: &str,
     transaction: &Transaction,
 ) -> Result<(), AppError> {
-    let client = Client::builder()
-        .timeout(Duration::from_secs(10))
-        .build()
-        .map_err(|e| AppError::Internal(e.to_string()))?;
-
     let payload = WebhookPayload {
         event: "payment.status_changed",
         payment_id: transaction.id,
@@ -54,7 +62,54 @@ pub async fn deliver_payment_webhook(
 
     let body = serde_json::to_string(&payload)
         .map_err(|e| AppError::Internal(format!("webhook serialization failed: {e}")))?;
-    let signature = sign_payload(&state.config.webhook_signing_secret, &body);
+
+    deliver_with_retries(
+        state,
+        url,
+        transaction.id,
+        "payment.status_changed",
+        &body,
+    )
+    .await
+}
+
+pub async fn deliver_invoice_webhook(
+    state: &AppState,
+    url: &str,
+    invoice: &Invoice,
+    transaction: &Transaction,
+) -> Result<(), AppError> {
+    let payload = InvoiceWebhookPayload {
+        event: "invoice.paid",
+        invoice_id: invoice.id,
+        reference: &invoice.reference,
+        amount: invoice.amount,
+        currency: &invoice.currency,
+        country: &invoice.country,
+        status: "paid",
+        transaction_id: transaction.id,
+        timestamp: Utc::now().to_rfc3339(),
+    };
+
+    let body = serde_json::to_string(&payload)
+        .map_err(|e| AppError::Internal(format!("webhook serialization failed: {e}")))?;
+
+    deliver_with_retries(state, url, transaction.id, "invoice.paid", &body).await
+}
+
+async fn deliver_with_retries(
+    state: &AppState,
+    url: &str,
+    transaction_id: uuid::Uuid,
+    event_type: &str,
+    body: &str,
+) -> Result<(), AppError> {
+    let client = Client::builder()
+        .timeout(Duration::from_secs(10))
+        .build()
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+
+    let signature = sign_payload(&state.config.webhook_signing_secret, body);
 
     for attempt in 1..=3 {
         if attempt > 1 {
@@ -65,7 +120,7 @@ pub async fn deliver_payment_webhook(
             .post(url)
             .header("Content-Type", "application/json")
             .header("X-Relay-Signature", format!("sha256={signature}"))
-            .body(body.clone())
+            .body(body.to_string())
             .send()
             .await;
 
@@ -75,12 +130,13 @@ pub async fn deliver_payment_webhook(
                 let success = resp.status().is_success();
                 queries::record_webhook_attempt(
                     state.db.pool(),
-                    transaction.id,
+                    transaction_id,
                     attempt,
                     url,
                     Some(status),
                     success,
                     None,
+                    event_type,
                 )
                 .await?;
                 if success {
@@ -90,12 +146,13 @@ pub async fn deliver_payment_webhook(
             Err(e) => {
                 queries::record_webhook_attempt(
                     state.db.pool(),
-                    transaction.id,
+                    transaction_id,
                     attempt,
                     url,
                     None,
                     false,
                     Some(&e.to_string()),
+                    event_type,
                 )
                 .await?;
             }

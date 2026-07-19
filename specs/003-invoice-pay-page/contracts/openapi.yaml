@@ -1,0 +1,108 @@
+openapi: 3.1.0
+info:
+  title: Payment Relay API (v0.3 — Invoice Pay Page)
+  version: 0.3.0
+  description: |
+    Extends v0.2 with public payer-facing pay page routes.
+    JSON API routes from v0.1/v0.2 unchanged.
+
+servers:
+  - url: http://localhost:8080
+
+tags:
+  - name: pay-page
+    description: Public payer routes (no API key)
+
+paths:
+  /pay/{reference}:
+    get:
+      tags: [pay-page]
+      summary: View invoice pay page
+      description: |
+        Returns mobile-friendly HTML for an invoice. No authentication required;
+        reference acts as capability token.
+      parameters:
+        - name: reference
+          in: path
+          required: true
+          schema:
+            type: string
+            example: INV_RTL_a1b2c3d4
+      responses:
+        '200':
+          description: HTML pay page (open, paid, expired, or cancelled state)
+          content:
+            text/html:
+              schema:
+                type: string
+        '404':
+          description: Generic not-found HTML (invalid reference)
+
+    post:
+      tags: [pay-page]
+      summary: Submit payment from pay page
+      description: Initiates mobile-money deposit for an open invoice.
+      parameters:
+        - name: reference
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [phone, provider, idempotency_key, form_token]
+              properties:
+                phone:
+                  type: string
+                  example: "260763456789"
+                provider:
+                  type: string
+                  example: MTN_MOMO_ZMB
+                idempotency_key:
+                  type: string
+                  description: UUID generated per page load
+                form_token:
+                  type: string
+                  description: HMAC CSRF token from GET response
+      responses:
+        '200':
+          description: HTML success or error page
+          content:
+            text/html:
+              schema:
+                type: string
+        '404':
+          description: Generic not-found HTML
+        '429':
+          description: Rate limit exceeded
+
+components:
+  schemas:
+    InvoicePaidWebhook:
+      type: object
+      properties:
+        event:
+          type: string
+          enum: [invoice.paid]
+        invoice_id:
+          type: string
+          format: uuid
+        reference:
+          type: string
+        amount:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        country:
+          type: string
+        transaction_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [paid]

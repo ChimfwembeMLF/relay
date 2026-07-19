@@ -5,7 +5,7 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 
 use crate::error::AppError;
-use crate::gateway::{GatewayPaymentRequest, GatewayResponse, PaymentGateway};
+use crate::gateway::{GatewayDepositRequest, GatewayPaymentRequest, GatewayResponse, PaymentGateway};
 
 #[derive(Clone)]
 pub struct PawapayGateway {
@@ -50,6 +50,8 @@ struct PawapayPayoutRequest {
 struct PawapayResponse {
     #[serde(rename = "payoutId")]
     payout_id: Option<String>,
+    #[serde(rename = "depositId")]
+    deposit_id: Option<String>,
     status: String,
     #[serde(rename = "failureReason")]
     failure_reason: Option<PawapayFailure>,
@@ -142,6 +144,115 @@ impl PaymentGateway for PawapayGateway {
             last_error.unwrap_or_else(|| "gateway retries exhausted".into()),
         ))
     }
+
+    async fn process_deposit(&self, request: GatewayDepositRequest) -> Result<GatewayResponse, AppError> {
+        let payer = build_payer(&request.payment_method)?;
+
+        let payload = PawapayDepositRequest {
+            amount: request.amount.to_string(),
+            currency: request.currency.clone(),
+            deposit_id: request.deposit_id.to_string(),
+            payer,
+            client_reference_id: request.client_reference,
+        };
+
+        let url = format!("{}/v2/deposits", self.base_url.trim_end_matches('/'));
+        self.post_with_retry(&url, &payload, request.deposit_id.to_string(), |body| {
+            body.deposit_id.clone()
+        })
+        .await
+    }
+}
+
+#[derive(Serialize)]
+struct PawapayDepositRequest {
+    amount: String,
+    currency: String,
+    #[serde(rename = "depositId")]
+    deposit_id: String,
+    payer: serde_json::Value,
+    #[serde(rename = "clientReferenceId")]
+    client_reference_id: Option<String>,
+}
+
+impl PawapayGateway {
+    async fn post_with_retry<T: Serialize>(
+        &self,
+        url: &str,
+        payload: &T,
+        fallback_id: String,
+        reference: impl Fn(&PawapayResponse) -> Option<String>,
+    ) -> Result<GatewayResponse, AppError> {
+        let mut last_error = None;
+
+        for attempt in 0..3 {
+            if attempt > 0 {
+                let delay = Duration::from_millis(100 * 4_u64.pow(attempt - 1));
+                tokio::time::sleep(delay).await;
+            }
+
+            let response = self
+                .client
+                .post(url)
+                .bearer_auth(&self.api_token)
+                .json(payload)
+                .send()
+                .await;
+
+            match response {
+                Ok(resp) => {
+                    let status_code = resp.status();
+                    let body: PawapayResponse = resp
+                        .json()
+                        .await
+                        .map_err(|e| AppError::Gateway(format!("invalid gateway response: {e}")))?;
+
+                    let success = matches!(
+                        body.status.as_str(),
+                        "ACCEPTED" | "COMPLETED" | "DUPLICATE_IGNORED"
+                    );
+
+                    if success {
+                        return Ok(GatewayResponse {
+                            reference: reference(&body).or(Some(fallback_id.clone())),
+                            status: body.status,
+                            success: true,
+                            error: None,
+                        });
+                    }
+
+                    if Self::is_retryable(status_code, &body) && attempt < 2 {
+                        last_error = body.failure_reason.map(|f| f.failure_message);
+                        continue;
+                    }
+
+                    return Ok(GatewayResponse {
+                        reference: reference(&body),
+                        status: body.status,
+                        success: false,
+                        error: body
+                            .failure_reason
+                            .map(|f| format!("{}: {}", f.failure_code, f.failure_message)),
+                    });
+                }
+                Err(e) if e.is_timeout() || e.is_connect() => {
+                    last_error = Some(e.to_string());
+                    if attempt < 2 {
+                        continue;
+                    }
+                }
+                Err(e) => return Err(AppError::Gateway(e.to_string())),
+            }
+        }
+
+        Err(AppError::Gateway(
+            last_error.unwrap_or_else(|| "gateway retries exhausted".into()),
+        ))
+    }
+}
+
+fn build_payer(method: &crate::models::PaymentMethod) -> Result<serde_json::Value, AppError> {
+    build_recipient(method)
 }
 
 fn build_recipient(method: &crate::models::PaymentMethod) -> Result<serde_json::Value, AppError> {

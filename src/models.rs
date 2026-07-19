@@ -92,6 +92,8 @@ pub struct Transaction {
     pub gateway_reference: Option<String>,
     pub gateway_status: Option<String>,
     pub error: Option<String>,
+    pub invoice_id: Option<Uuid>,
+    pub direction: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -141,6 +143,15 @@ pub struct CreateSystemRequest {
     pub prefix: String,
     pub enabled_countries: Vec<String>,
     pub webhook_url: Option<String>,
+    #[serde(default)]
+    pub wallet_seeds: Vec<WalletSeedOverride>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WalletSeedOverride {
+    pub country: String,
+    pub currency: String,
+    pub amount: i64,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -149,6 +160,109 @@ pub struct CreateSystemResponse {
     pub name: String,
     pub prefix: String,
     pub api_key: String,
+    pub wallets_seeded: usize,
+}
+
+#[derive(Debug, Clone, Serialize, FromRow)]
+pub struct WalletSeedEvent {
+    pub id: Uuid,
+    pub system_id: Uuid,
+    pub wallet_id: Uuid,
+    pub country: String,
+    pub currency: String,
+    pub amount: i64,
+    pub source: String,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, FromRow)]
+pub struct Invoice {
+    pub id: Uuid,
+    pub system_id: Uuid,
+    pub reference: String,
+    pub description: Option<String>,
+    pub amount: i64,
+    pub currency: String,
+    pub country: String,
+    pub status: String,
+    pub expires_at: DateTime<Utc>,
+    pub paid_at: Option<DateTime<Utc>>,
+    pub transaction_id: Option<Uuid>,
+    pub qr_payload_url: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateInvoiceRequest {
+    pub amount: i64,
+    pub currency: String,
+    pub country: String,
+    pub description: Option<String>,
+    #[serde(default = "default_expires_hours")]
+    pub expires_in_hours: i64,
+}
+
+fn default_expires_hours() -> i64 {
+    24
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct InvoiceResponse {
+    pub id: Uuid,
+    pub reference: String,
+    pub system_id: Uuid,
+    pub amount: i64,
+    pub currency: String,
+    pub country: String,
+    pub status: String,
+    pub description: Option<String>,
+    pub expires_at: DateTime<Utc>,
+    pub paid_at: Option<DateTime<Utc>>,
+    pub transaction_id: Option<Uuid>,
+    pub qr_url: String,
+    pub qr_code_png_base64: String,
+}
+
+impl Invoice {
+    pub fn to_response(&self, qr_code_png_base64: String) -> InvoiceResponse {
+        InvoiceResponse {
+            id: self.id,
+            reference: self.reference.clone(),
+            system_id: self.system_id,
+            amount: self.amount,
+            currency: self.currency.clone(),
+            country: self.country.clone(),
+            status: self.status.clone(),
+            description: self.description.clone(),
+            expires_at: self.expires_at,
+            paid_at: self.paid_at,
+            transaction_id: self.transaction_id,
+            qr_url: self.qr_payload_url.clone(),
+            qr_code_png_base64,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CollectInvoiceRequest {
+    pub payment_method: PaymentMethod,
+    pub idempotency_key: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct StatusSummary {
+    pub count: i64,
+    pub amount: i64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ReportSummary {
+    pub from: DateTime<Utc>,
+    pub to: DateTime<Utc>,
+    pub total_count: i64,
+    pub total_amount: i64,
+    pub by_status: std::collections::HashMap<String, StatusSummary>,
 }
 
 /// Warn-only validation per research.md — logs warning but does not reject.

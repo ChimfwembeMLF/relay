@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use uuid::Uuid;
 
 use crate::error::AppError;
-use crate::gateway::{GatewayPaymentRequest, GatewayResponse, PaymentGateway};
+use crate::gateway::{GatewayDepositRequest, GatewayPaymentRequest, GatewayResponse, PaymentGateway};
 
 #[derive(Clone, Default)]
 pub struct MockGateway {
@@ -45,6 +45,27 @@ impl PaymentGateway for MockGateway {
                 status: "REJECTED".into(),
                 success: false,
                 error: Some("mock gateway failure".into()),
+            })
+        }
+    }
+
+    async fn process_deposit(&self, request: GatewayDepositRequest) -> Result<GatewayResponse, AppError> {
+        if self.succeed {
+            Ok(GatewayResponse {
+                reference: self
+                    .reference
+                    .clone()
+                    .or(Some(request.deposit_id.to_string())),
+                status: "ACCEPTED".into(),
+                success: true,
+                error: None,
+            })
+        } else {
+            Ok(GatewayResponse {
+                reference: None,
+                status: "REJECTED".into(),
+                success: false,
+                error: Some("mock deposit failure".into()),
             })
         }
     }
