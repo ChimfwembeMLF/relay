@@ -1,0 +1,159 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+  Theme tokens from frontend/DESIGN.md (Coinbase analysis) — literal mapping only.
+  Primary: Coinbase Blue #0052ff
+*/
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 220 14% 5%;
+    --card: 0 0% 100%;
+    --card-foreground: 220 14% 5%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 14% 5%;
+    /* #0052ff */
+    --primary: 221 100% 50%;
+    --primary-foreground: 0 0% 100%;
+    /* #003ecc */
+    --primary-active: 224 100% 40%;
+    /* #a8b8cc */
+    --primary-disabled: 214 28% 73%;
+    /* surface-strong #eef0f3 */
+    --secondary: 220 16% 94%;
+    --secondary-foreground: 220 14% 5%;
+    /* surface-soft #f7f7f7 */
+    --muted: 0 0% 97%;
+    /* body #5b616e */
+    --muted-foreground: 220 9% 39%;
+    --accent: 220 16% 94%;
+    --accent-foreground: 220 14% 5%;
+    /* semantic-down #cf202f */
+    --destructive: 355 73% 47%;
+    --destructive-foreground: 0 0% 100%;
+    /* hairline #dee1e6 */
+    --border: 220 13% 89%;
+    --input: 220 13% 89%;
+    --ring: 221 100% 50%;
+    /* semantic-up #05b169 */
+    --success: 155 95% 36%;
+    --surface-dark: 220 14% 5%;
+    --surface-dark-elevated: 220 14% 10%;
+    --chart-1: 221 100% 50%;
+    --chart-2: 155 95% 36%;
+    --chart-3: 355 73% 47%;
+    --chart-4: 43 100% 48%;
+    --chart-5: 220 9% 39%;
+    /* rounded.md = 12px */
+    --radius: 0.75rem;
+  }
+
+  .dark {
+    --background: 220 14% 5%;
+    --foreground: 0 0% 100%;
+    --card: 220 14% 10%;
+    --card-foreground: 0 0% 100%;
+    --popover: 220 14% 10%;
+    --popover-foreground: 0 0% 100%;
+    --primary: 221 100% 50%;
+    --primary-foreground: 0 0% 100%;
+    --primary-active: 224 100% 40%;
+    --primary-disabled: 214 28% 45%;
+    --secondary: 220 14% 14%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 220 14% 14%;
+    --muted-foreground: 210 5% 66%;
+    --accent: 220 14% 14%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 355 73% 47%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 220 14% 18%;
+    --input: 220 14% 18%;
+    --ring: 221 100% 55%;
+    --success: 155 95% 40%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans text-base antialiased;
+    font-size: 16px;
+    line-height: 1.5;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+/* DESIGN.md typography scale (Inter / IBM Plex Mono substitutes) */
+@layer utilities {
+  .text-display-lg {
+    font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+    font-size: 52px;
+    font-weight: 400;
+    line-height: 1;
+    letter-spacing: -1.3px;
+  }
+  .text-display-md {
+    font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+    font-size: 44px;
+    font-weight: 400;
+    line-height: 1.09;
+    letter-spacing: -1px;
+  }
+  .text-display-sm {
+    font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+    font-size: 36px;
+    font-weight: 400;
+    line-height: 1.11;
+    letter-spacing: -0.5px;
+  }
+  .text-title-lg {
+    font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+    font-size: 32px;
+    font-weight: 400;
+    line-height: 1.13;
+    letter-spacing: -0.4px;
+  }
+  .text-title-md {
+    font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+    font-size: 18px;
+    font-weight: 600;
+    line-height: 1.33;
+    letter-spacing: 0;
+  }
+  .text-nav-link {
+    font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 1.4;
+    letter-spacing: 0;
+  }
+  .text-number-display {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 18px;
+    font-weight: 500;
+    line-height: 1.4;
+    letter-spacing: 0;
+  }
+  .text-caption-strong {
+    font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.5;
+    letter-spacing: 0;
+  }
+}

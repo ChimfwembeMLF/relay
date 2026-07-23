@@ -1,4 +1,9 @@
 /target/
+frontend/node_modules/
+frontend/dist/
+sdk/typescript/node_modules/
+sdk/typescript/dist/
+workers/node_modules/
 **/*.rs.bk
 .env
 .env.local
@@ -8,3 +13,4 @@
 .vscode/
 *.swp
 *.tmp
+Thumbs.db

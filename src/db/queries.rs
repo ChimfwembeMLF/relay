@@ -90,6 +90,21 @@ pub async fn get_system_by_api_key_hash(pool: &PgPool, api_key_hash: &str) -> Re
     .ok_or(AppError::Unauthorized)
 }
 
+/// All merchants that have a webhook endpoint configured.
+pub async fn list_webhook_subscribers(pool: &PgPool) -> Result<Vec<System>, AppError> {
+    let rows = sqlx::query_as::<_, System>(
+        r#"
+        SELECT id, name, prefix, enabled_countries, webhook_url, api_key_hash, created_at, updated_at
+        FROM systems
+        WHERE webhook_url IS NOT NULL AND webhook_url <> ''
+        ORDER BY created_at ASC
+        "#,
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
+}
+
 pub async fn get_or_create_wallet(
     pool: &PgPool,
     system_id: Uuid,

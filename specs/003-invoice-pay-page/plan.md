@@ -65,7 +65,7 @@ specs/003-invoice-pay-page/
 ├── quickstart.md
 ├── contracts/
 │   ├── openapi.yaml
-│   └── pay-page-html.md
+│   └── pay-page-ui.md
 ├── checklists/
 │   └── requirements.md
 └── tasks.md                    # /speckit-tasks

@@ -10,10 +10,18 @@ docker compose up -d postgres   # or use local Postgres
 cargo run
 ```
 
+- **Merchant app**: http://localhost:8080/ (register, sign in, invoices, payouts)
+- **Swagger UI**: http://localhost:8080/swagger-ui/ (also `/docs`)
+- **OpenAPI spec**: http://localhost:8080/api-docs/openapi.yaml
+- **Customer pay page**: http://localhost:8080/pay/{reference}
+
 - **Feature 001 (payments)**: `specs/001-payment-relay/`
+- **Feature 002 (wallets, invoices, reports)**: `specs/002-wallet-invoices-reports/`
 - **Feature 003 (invoice pay page)**: `specs/003-invoice-pay-page/`
-- **API contracts**: `specs/001-payment-relay/contracts/openapi.yaml`, `specs/002-wallet-invoices-reports/contracts/openapi.yaml`
-- **Validation guides**: `specs/001-payment-relay/quickstart.md`, `specs/002-wallet-invoices-reports/quickstart.md`
+- **API contracts**: `specs/001-payment-relay/contracts/openapi.yaml`, `specs/002-wallet-invoices-reports/contracts/openapi.yaml`, `specs/003-invoice-pay-page/contracts/openapi.yaml`
+- **Validation guides**: `specs/001-payment-relay/quickstart.md`, `specs/002-wallet-invoices-reports/quickstart.md`, `specs/003-invoice-pay-page/quickstart.md`
+- **SDKs**: [`sdk/`](sdk/) — TypeScript (`@relay/sdk`) and Python (`relay-sdk`)
+- **Integration guides**: [`docs/integration/`](docs/integration/) — getting started, payments, invoices, webhooks, reports
 - **Tests**: `DATABASE_URL=postgres://relay:relay@localhost:5432/payment_relay cargo test`
 
 ### Feature 002 endpoints
@@ -23,16 +31,66 @@ cargo run
 | `POST /systems` | Registers a system and auto-seeds wallets from `config/wallet_seed_defaults.json` (optional `wallet_seeds` overrides) |
 | `POST /invoices` | Creates a pay-in invoice with QR URL and base64 PNG |
 | `GET /invoices` | Lists invoices (optional `?status=open`) |
-| `GET /invoices/{reference}` | Lookup invoice by reference |
+| `GET /invoices/reference/{reference}` | Lookup invoice by reference |
 | `POST /invoices/{id}/collect` | Collect payment via pawaPay deposit; credits wallet |
 | `POST /invoices/{id}/cancel` | Cancel an open invoice |
 | `GET /reports/transactions` | Transaction summary by date range (`?format=csv&detail=true` for CSV) |
 | `GET /reports/wallets` | Wallet balances and period deltas (`?format=csv`) |
 | `GET /reports/invoices` | Invoice summary by date range (`?format=csv`) |
-| `GET /pay/{reference}` | Public HTML pay page (from invoice QR links) |
-| `POST /pay/{reference}` | Submit mobile-money payment from pay page |
+| `GET /pay/{reference}` | React pay page (from invoice QR links) |
+| `GET /api/pay/{reference}` | Pay page JSON API |
+| `POST /api/pay/{reference}` | Submit payment from React pay page |
 
-Configure wallet seed defaults via `WALLET_SEED_DEFAULTS_PATH` or `WALLET_SEED_DEFAULTS_JSON`, set `INVOICE_PAY_BASE_URL` for QR payment links, and `PAY_PAGE_RATE_LIMIT` for POST rate limiting.
+### React merchant app
+
+Full UI at `/` — register systems, sign in with API key, wallets, invoices (QR/pay links), payouts, transactions, and reports. Customer checkout stays at `/pay/{reference}`. Design tokens: `frontend/DESIGN.md`.
+
+`cargo build` / `cargo run` builds the React app via `build.rs`. Requires Node.js/`npm`.
+
+```bash
+cargo run   # serves merchant app at / and pay page at /pay/{reference}
+```
+
+Skip the frontend step when iterating on Rust only:
+
+```bash
+SKIP_FRONTEND_BUILD=1 cargo run
+```
+
+Dev mode with hot reload:
+
+```bash
+# terminal 1
+SKIP_FRONTEND_BUILD=1 cargo run
+
+# terminal 2
+cd frontend && npm run dev   # http://localhost:5173/
+```
+
+Configure wallet seed defaults via `WALLET_SEED_DEFAULTS_PATH` or `WALLET_SEED_DEFAULTS_JSON`, set `INVOICE_PAY_BASE_URL` for QR payment links, `PAY_PAGE_RATE_LIMIT` for POST rate limiting, `REDIS_URL` for BullMQ webhook queues, `ADMIN_USERNAME` / `ADMIN_PASSWORD` for the platform backoffice login (`/admin`), and `FALLBACK_GATEWAY=mock` for local dev without pawaPay credentials.
+
+### Production (Dokploy) — same domain
+
+```env
+DATABASE_URL=postgres://USER:PASS@HOST:5432/payment_relay
+REDIS_URL=redis://USER:PASS@HOST:6379
+INVOICE_PAY_BASE_URL=https://payments.tekreminnovations.com
+WEBHOOK_SIGNING_SECRET=<long-random-secret>
+PAWAPAY_API_TOKEN=...
+PAWAPAY_BASE_URL=https://api.pawapay.io
+PORT=8080
+```
+
+- **One public domain** for UI + API: `https://payments.tekreminnovations.com`
+- **Postgres** + **Redis** in Dokploy (Redis required for queued webhooks)
+- Deploy **Relay API** and **`workers/`** (BullMQ) with the same `REDIS_URL` — see [`workers/README.md`](workers/README.md)
+
+Local Redis:
+
+```bash
+docker compose up -d postgres redis
+```
+
 
 ---
 

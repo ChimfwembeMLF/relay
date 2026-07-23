@@ -121,27 +121,19 @@ pub async fn collect_invoice_internal(
         "invoice collected"
     );
 
-    if let Ok(system) = queries::get_system_by_id(state.db.pool(), system_id).await {
-        if let Some(url) = &system.webhook_url {
-            let webhook_state = state.clone();
-            let webhook_url = url.clone();
-            let inv = invoice.clone();
-            let tx_clone = tx.clone();
-            tokio::spawn(async move {
-                if let Err(e) =
-                    sender::deliver_invoice_webhook(&webhook_state, &webhook_url, &inv, &tx_clone)
-                        .await
-                {
-                    tracing::error!(
-                        invoice_id = %inv.id,
-                        payment_id = %tx_clone.id,
-                        error = %e,
-                        "invoice webhook delivery failed"
-                    );
-                }
-            });
+    let webhook_state = state.clone();
+    let inv = invoice.clone();
+    let tx_clone = tx.clone();
+    tokio::spawn(async move {
+        if let Err(e) = sender::broadcast_invoice_webhook(&webhook_state, &inv, &tx_clone).await {
+            tracing::error!(
+                invoice_id = %inv.id,
+                payment_id = %tx_clone.id,
+                error = %e,
+                "invoice webhook broadcast failed"
+            );
         }
-    }
+    });
 
     Ok(tx)
 }
@@ -156,6 +148,9 @@ pub async fn create_invoice_handler(
     }
     if !auth.system.enabled_countries.contains(&req.country) {
         return Err(AppError::CountryNotEnabled);
+    }
+    if let Err(msg) = crate::catalog::validate_country_currency(&req.country, &req.currency) {
+        return Err(AppError::Validation(msg));
     }
 
     let reference = format!(

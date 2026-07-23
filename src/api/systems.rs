@@ -6,6 +6,7 @@ use uuid::Uuid;
 
 use crate::auth::{generate_api_key, hash_api_key};
 use crate::db::queries;
+use crate::db::system_users;
 use crate::error::AppError;
 use crate::models::{CreateSystemRequest, CreateSystemResponse, SystemPublic};
 use crate::seed::seed_system_wallets_in_tx;
@@ -21,8 +22,12 @@ pub async fn create_system(
         return Err(AppError::Conflict(format!("prefix '{}' already exists", req.prefix)));
     }
 
+    // Public register always enables Zambia only (catalog default).
+    let enabled_countries = vec![crate::catalog::DEFAULT_REGISTER_COUNTRY.to_string()];
+
     let api_key = generate_api_key();
     let api_key_hash = hash_api_key(&api_key);
+    let username = req.username.trim().to_lowercase();
 
     let mut tx = state.db.pool().begin().await?;
 
@@ -30,26 +35,44 @@ pub async fn create_system(
         &mut tx,
         &req.name,
         &req.prefix,
-        &req.enabled_countries,
+        &enabled_countries,
         req.webhook_url.as_deref(),
         &api_key_hash,
     )
     .await?;
 
+    let user =
+        system_users::create_system_user_in_tx(&mut tx, system.id, &username, &req.password)
+            .await?;
+
     let wallets_seeded = seed_system_wallets_in_tx(
         &mut tx,
         system.id,
-        &req.enabled_countries,
+        &enabled_countries,
         &state.config.wallet_seed_defaults,
         &req.wallet_seeds,
     )
     .await?;
 
+    if let Some(url) = req.webhook_url.as_deref() {
+        crate::db::webhook_endpoints::create_endpoint_in_tx(
+            &mut tx,
+            system.id,
+            url,
+            Some("Primary"),
+        )
+        .await?;
+    }
+
     tx.commit().await?;
+
+    let (session_token, _) =
+        system_users::create_session(state.db.pool(), user.id).await?;
 
     tracing::info!(
         system_id = %system.id,
         prefix = %system.prefix,
+        username = %username,
         wallets_seeded = wallets_seeded,
         "system registered with seeded wallets"
     );
@@ -58,7 +81,9 @@ pub async fn create_system(
         id: system.id,
         name: system.name,
         prefix: system.prefix,
+        username,
         api_key,
+        session_token,
         wallets_seeded,
     }))
 }
@@ -86,8 +111,21 @@ fn validate_create_request(req: &CreateSystemRequest) -> Result<(), AppError> {
             "prefix must be 2-8 uppercase alphanumeric characters".into(),
         ));
     }
-    if req.enabled_countries.is_empty() {
-        return Err(AppError::Validation("enabled_countries must not be empty".into()));
+    let username = req.username.trim();
+    if username.len() < 3
+        || username.len() > 64
+        || !username
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '.')
+    {
+        return Err(AppError::Validation(
+            "username must be 3–64 chars (letters, numbers, _-.)".into(),
+        ));
+    }
+    if req.password.len() < 8 {
+        return Err(AppError::Validation(
+            "password must be at least 8 characters".into(),
+        ));
     }
     if let Some(url) = &req.webhook_url {
         if !url.starts_with("https://") {

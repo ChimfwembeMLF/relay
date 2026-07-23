@@ -1,4 +1,3 @@
 {
-  "ZM": { "currency": "ZMW", "amount": 100000 },
-  "US": { "currency": "USD", "amount": 10000 }
+  "ZM": { "currency": "ZMW", "amount": 0 }
 }

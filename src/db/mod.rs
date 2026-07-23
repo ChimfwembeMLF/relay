@@ -1,7 +1,10 @@
+pub mod admins;
 pub mod invoices;
 pub mod queries;
 pub mod reports;
+pub mod system_users;
 pub mod wallet_seeds;
+pub mod webhook_endpoints;
 
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;

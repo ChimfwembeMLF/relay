@@ -15,6 +15,7 @@ pub async fn setup_test_state(gateway: Arc<dyn PaymentGateway>) -> AppState {
         .expect("DATABASE_URL must be set for integration tests");
     let config = Config {
         database_url,
+        redis_url: None,
         port: 8080,
         pawapay_api_token: String::new(),
         pawapay_base_url: "https://api.sandbox.pawapay.io".into(),
@@ -25,6 +26,8 @@ pub async fn setup_test_state(gateway: Arc<dyn PaymentGateway>) -> AppState {
             .map(|c| c.wallet_seed_defaults)
             .unwrap_or_default(),
         pay_page_rate_limit: 100,
+        admin_username: Some("admin".into()),
+        admin_password: Some("admin-test-password".into()),
     };
     AppState::new(config, gateway).await.expect("failed to create test state")
 }
@@ -78,10 +81,13 @@ pub async fn form_request(
 pub async fn register_test_system(app: &Router) -> (String, String, String) {
     let suffix: String = uuid::Uuid::new_v4().to_string()[..4].to_uppercase();
     let prefix = format!("T{suffix}");
+    let username = format!("user_{suffix}").to_lowercase();
     let body = format!(
         r#"{{
         "name": "Test System",
         "prefix": "{prefix}",
+        "username": "{username}",
+        "password": "testpass123",
         "enabled_countries": ["ZM"],
         "webhook_url": "https://example.com/webhook"
     }}"#

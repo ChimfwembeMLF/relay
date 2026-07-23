@@ -4,7 +4,8 @@ info:
   version: 0.3.0
   description: |
     Extends v0.2 with public payer-facing pay page routes.
-    JSON API routes from v0.1/v0.2 unchanged.
+    The pay UI is a React SPA (`frontend/`) served at `/pay/{reference}`.
+    Invoice data and payment submission use JSON at `/api/pay/{reference}`.
 
 servers:
   - url: http://localhost:8080
@@ -17,10 +18,11 @@ paths:
   /pay/{reference}:
     get:
       tags: [pay-page]
-      summary: View invoice pay page
+      summary: Serve React pay page shell
       description: |
-        Returns mobile-friendly HTML for an invoice. No authentication required;
-        reference acts as capability token.
+        Returns the built React SPA index.html. The client loads invoice data
+        from `GET /api/pay/{reference}`. Requires `frontend/dist` from
+        `npm run build`.
       parameters:
         - name: reference
           in: path
@@ -30,13 +32,42 @@ paths:
             example: INV_RTL_a1b2c3d4
       responses:
         '200':
-          description: HTML pay page (open, paid, expired, or cancelled state)
+          description: React SPA HTML shell
           content:
             text/html:
               schema:
                 type: string
+        '503':
+          description: Frontend not built
+
+  /api/pay/{reference}:
+    get:
+      tags: [pay-page]
+      summary: Load invoice for pay page
+      description: |
+        Returns invoice details, provider options, and CSRF/idempotency tokens
+        for an open invoice. No authentication required; reference acts as
+        capability token.
+      parameters:
+        - name: reference
+          in: path
+          required: true
+          schema:
+            type: string
+            example: INV_RTL_a1b2c3d4
+      responses:
+        '200':
+          description: Invoice pay page data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayPageResponse'
         '404':
-          description: Generic not-found HTML (invalid reference)
+          description: Unknown or expired reference
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayErrorResponse'
 
     post:
       tags: [pay-page]
@@ -51,37 +82,141 @@ paths:
       requestBody:
         required: true
         content:
-          application/x-www-form-urlencoded:
+          application/json:
             schema:
-              type: object
-              required: [phone, provider, idempotency_key, form_token]
-              properties:
-                phone:
-                  type: string
-                  example: "260763456789"
-                provider:
-                  type: string
-                  example: MTN_MOMO_ZMB
-                idempotency_key:
-                  type: string
-                  description: UUID generated per page load
-                form_token:
-                  type: string
-                  description: HMAC CSRF token from GET response
+              $ref: '#/components/schemas/PaySubmitRequest'
       responses:
         '200':
-          description: HTML success or error page
+          description: Payment accepted
           content:
-            text/html:
+            application/json:
               schema:
-                type: string
+                $ref: '#/components/schemas/PaySubmitResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayErrorResponse'
         '404':
-          description: Generic not-found HTML
+          description: Unknown reference
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayErrorResponse'
+        '409':
+          description: Invoice not payable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayErrorResponse'
         '429':
           description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayErrorResponse'
 
 components:
   schemas:
+    ProviderOption:
+      type: object
+      required: [value, label]
+      properties:
+        value:
+          type: string
+          example: MTN_MOMO_ZMB
+        label:
+          type: string
+          example: MTN MoMo Zambia
+
+    PayPageResponse:
+      type: object
+      required:
+        - reference
+        - amount
+        - amount_display
+        - currency
+        - country
+        - status
+        - expires_at
+        - payable
+        - providers
+      properties:
+        reference:
+          type: string
+        amount:
+          type: integer
+          format: int64
+        amount_display:
+          type: string
+          example: ZMW 50.00
+        currency:
+          type: string
+        country:
+          type: string
+        description:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [open, paid, expired, cancelled]
+        expires_at:
+          type: string
+          format: date-time
+        payable:
+          type: boolean
+        form_token:
+          type: string
+          description: HMAC CSRF token (present when payable)
+        idempotency_key:
+          type: string
+          format: uuid
+          description: UUID generated per page load (present when payable)
+        providers:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProviderOption'
+
+    PaySubmitRequest:
+      type: object
+      required: [phone, provider, idempotency_key, form_token]
+      properties:
+        phone:
+          type: string
+          example: "260763456789"
+        provider:
+          type: string
+          example: MTN_MOMO_ZMB
+        idempotency_key:
+          type: string
+          format: uuid
+        form_token:
+          type: string
+
+    PaySubmitResponse:
+      type: object
+      required: [status, message, amount_display, reference]
+      properties:
+        status:
+          type: string
+          enum: [paid]
+        message:
+          type: string
+        amount_display:
+          type: string
+        reference:
+          type: string
+
+    PayErrorResponse:
+      type: object
+      required: [error, message]
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+
     InvoicePaidWebhook:
       type: object
       properties:

@@ -141,8 +141,14 @@ impl From<Transaction> for ProcessPaymentResponse {
 pub struct CreateSystemRequest {
     pub name: String,
     pub prefix: String,
+    /// Ignored on public register — server forces Zambia (`ZM`).
+    #[serde(default)]
     pub enabled_countries: Vec<String>,
     pub webhook_url: Option<String>,
+    /// Dashboard login username (required for merchant UI).
+    pub username: String,
+    /// Dashboard login password (required for merchant UI).
+    pub password: String,
     #[serde(default)]
     pub wallet_seeds: Vec<WalletSeedOverride>,
 }
@@ -159,7 +165,10 @@ pub struct CreateSystemResponse {
     pub id: Uuid,
     pub name: String,
     pub prefix: String,
+    pub username: String,
     pub api_key: String,
+    /// Dashboard session — use as `X-Session-Token` (shown so UI can sign in immediately).
+    pub session_token: String,
     pub wallets_seeded: usize,
 }
 

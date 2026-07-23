@@ -36,7 +36,7 @@ async fn invoice_create_collect_and_idempotency() {
     let (status, by_ref) = json_request(
         &app,
         "GET",
-        &format!("/invoices/{reference}"),
+        &format!("/invoices/reference/{reference}"),
         Some(&api_key),
         None,
     )

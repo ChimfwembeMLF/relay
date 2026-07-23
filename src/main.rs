@@ -5,6 +5,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use payment_relay::api;
 use payment_relay::config::Config;
+use payment_relay::gateway::mock::MockGateway;
 use payment_relay::gateway::pawapay::PawapayGateway;
 use payment_relay::gateway::PaymentGateway;
 use payment_relay::AppState;
@@ -21,10 +22,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .init();
 
     let config = Config::from_env()?;
-    let gateway: Arc<dyn PaymentGateway> = Arc::new(PawapayGateway::new(
-        config.pawapay_base_url.clone(),
-        config.pawapay_api_token.clone(),
-    ));
+    let gateway: Arc<dyn PaymentGateway> = if config.fallback_gateway == "mock" {
+        tracing::info!("using mock payment gateway");
+        Arc::new(MockGateway::success())
+    } else {
+        Arc::new(PawapayGateway::new(
+            config.pawapay_base_url.clone(),
+            config.pawapay_api_token.clone(),
+        ))
+    };
 
     let state = AppState::new(config.clone(), gateway).await?;
     let app = Router::new().merge(api::routes::create_router(state));

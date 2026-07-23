@@ -18,6 +18,7 @@ pub type WalletSeedDefaults = HashMap<String, CountrySeedDefault>;
 #[derive(Clone, Debug)]
 pub struct Config {
     pub database_url: String,
+    pub redis_url: Option<String>,
     pub port: u16,
     pub pawapay_api_token: String,
     pub pawapay_base_url: String,
@@ -26,15 +27,21 @@ pub struct Config {
     pub invoice_pay_base_url: String,
     pub wallet_seed_defaults: WalletSeedDefaults,
     pub pay_page_rate_limit: u32,
+    /// Bootstrap credentials for the platform backoffice (`POST /admin/login`).
+    pub admin_username: Option<String>,
+    pub admin_password: Option<String>,
 }
 
 impl Config {
     pub fn from_env() -> Result<Self, AppError> {
         let wallet_seed_defaults = load_wallet_seed_defaults()?;
 
+        let redis_url = env::var("REDIS_URL").ok().filter(|s| !s.trim().is_empty());
+
         Ok(Self {
             database_url: env::var("DATABASE_URL")
                 .map_err(|_| AppError::Config("DATABASE_URL is required".into()))?,
+            redis_url,
             port: env::var("PORT")
                 .unwrap_or_else(|_| "8080".into())
                 .parse()
@@ -53,6 +60,8 @@ impl Config {
                 .unwrap_or_else(|_| "10".into())
                 .parse()
                 .map_err(|_| AppError::Config("PAY_PAGE_RATE_LIMIT must be a valid u32".into()))?,
+            admin_username: env::var("ADMIN_USERNAME").ok().filter(|s| !s.trim().is_empty()),
+            admin_password: env::var("ADMIN_PASSWORD").ok().filter(|s| !s.trim().is_empty()),
         })
     }
 }

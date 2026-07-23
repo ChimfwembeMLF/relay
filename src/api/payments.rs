@@ -142,16 +142,13 @@ pub async fn process_payment(
     );
 
     if transaction.status == "completed" || transaction.status == "failed" {
-        if let Some(url) = &auth.system.webhook_url {
-            let webhook_state = state.clone();
-            let webhook_url = url.clone();
-            let tx = transaction.clone();
-            tokio::spawn(async move {
-                if let Err(e) = sender::deliver_payment_webhook(&webhook_state, &webhook_url, &tx).await {
-                    tracing::error!(payment_id = %tx.id, error = %e, "webhook delivery failed");
-                }
-            });
-        }
+        let webhook_state = state.clone();
+        let tx = transaction.clone();
+        tokio::spawn(async move {
+            if let Err(e) = sender::broadcast_payment_webhook(&webhook_state, &tx).await {
+                tracing::error!(payment_id = %tx.id, error = %e, "webhook broadcast failed");
+            }
+        });
     }
 
     Ok(Json(transaction.into()))
@@ -236,6 +233,17 @@ fn validate_payment_request(req: &ProcessPaymentRequest) -> Result<(), AppError>
     }
     if req.country.len() != 2 || !req.country.chars().all(|c| c.is_ascii_uppercase()) {
         return Err(AppError::Validation("country must be a 2-letter ISO code".into()));
+    }
+    let provider = req
+        .payment_method
+        .details
+        .get("provider")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    if let Err(msg) =
+        crate::catalog::validate_country_currency_provider(&req.country, &req.currency, provider)
+    {
+        return Err(AppError::Validation(msg));
     }
     Ok(())
 }
