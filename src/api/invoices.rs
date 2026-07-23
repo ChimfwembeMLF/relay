@@ -108,11 +108,23 @@ pub async fn collect_invoice_internal(
             error: None,
             invoice_id: Some(invoice.id),
             direction: "deposit",
+            batch_id: None,
+            refund_id: None,
         },
     )
     .await?;
 
-    mark_invoice_paid(state.db.pool(), invoice.id, tx.id).await?;
+    let phone = payment_method
+        .details
+        .get("phone")
+        .or_else(|| payment_method.details.get("phoneNumber"))
+        .and_then(|v| v.as_str());
+    let provider = payment_method
+        .details
+        .get("provider")
+        .and_then(|v| v.as_str());
+
+    mark_invoice_paid(state.db.pool(), invoice.id, tx.id, phone, provider).await?;
 
     tracing::info!(
         system_id = %system_id,

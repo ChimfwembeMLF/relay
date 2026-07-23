@@ -71,7 +71,7 @@ impl PaymentGateway for PawapayGateway {
         let recipient = build_recipient(&request.payment_method)?;
 
         let payload = PawapayPayoutRequest {
-            amount: request.amount.to_string(),
+            amount: format_pawapay_amount(request.amount),
             currency: request.currency.clone(),
             payout_id: request.payout_id.to_string(),
             recipient,
@@ -149,7 +149,7 @@ impl PaymentGateway for PawapayGateway {
         let payer = build_payer(&request.payment_method)?;
 
         let payload = PawapayDepositRequest {
-            amount: request.amount.to_string(),
+            amount: format_pawapay_amount(request.amount),
             currency: request.currency.clone(),
             deposit_id: request.deposit_id.to_string(),
             payer,
@@ -255,14 +255,50 @@ fn build_payer(method: &crate::models::PaymentMethod) -> Result<serde_json::Valu
     build_recipient(method)
 }
 
+/// Relay stores amounts as integer minor units (cents). PawaPay expects major units as a string
+/// (e.g. ZMW 500.00 → `"500"` or `"500.00"`), not `"50000"`.
+fn format_pawapay_amount(amount_minor: i64) -> String {
+    let whole = amount_minor / 100;
+    let cents = amount_minor.rem_euclid(100);
+    if cents == 0 {
+        whole.to_string()
+    } else {
+        format!("{whole}.{cents:02}")
+    }
+}
+
 fn build_recipient(method: &crate::models::PaymentMethod) -> Result<serde_json::Value, AppError> {
     match method.method_type.as_str() {
-        "mmo" => Ok(serde_json::json!({
-            "type": "MMO",
-            "accountDetails": method.details
-        })),
+        "mmo" => {
+            // Normalize phone → phoneNumber for PawaPay accountDetails.
+            let mut details = method.details.clone();
+            if details.get("phoneNumber").and_then(|v| v.as_str()).is_none() {
+                if let Some(phone) = details.get("phone").cloned() {
+                    details
+                        .as_object_mut()
+                        .map(|o| o.insert("phoneNumber".into(), phone));
+                }
+            }
+            Ok(serde_json::json!({
+                "type": "MMO",
+                "accountDetails": details
+            }))
+        }
         other => Err(AppError::Validation(format!(
             "unsupported payment method type for pawapay: {other}"
         ))),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::format_pawapay_amount;
+
+    #[test]
+    fn formats_minor_units_as_major_string() {
+        assert_eq!(format_pawapay_amount(50000), "500");
+        assert_eq!(format_pawapay_amount(1500), "15");
+        assert_eq!(format_pawapay_amount(1505), "15.05");
+        assert_eq!(format_pawapay_amount(1), "0.01");
     }
 }

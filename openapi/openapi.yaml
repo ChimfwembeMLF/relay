@@ -16,6 +16,7 @@ servers:
 tags:
   - name: systems
   - name: payments
+  - name: batches
   - name: wallets
   - name: invoices
   - name: reports
@@ -155,6 +156,63 @@ paths:
                 $ref: '#/components/schemas/ProcessPaymentResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /batches:
+    post:
+      tags: [batches]
+      summary: Create and process a payout batch (sync, max 100 lines)
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [system_id, idempotency_key, lines]
+              properties:
+                system_id: { type: string, format: uuid }
+                idempotency_key: { type: string }
+                lines:
+                  type: array
+                  minItems: 1
+                  maxItems: 100
+                  items:
+                    type: object
+                    required: [amount, currency, country, payment_method]
+                    properties:
+                      amount: { type: integer }
+                      currency: { type: string }
+                      country: { type: string }
+                      external_id: { type: string }
+                      payment_method:
+                        $ref: '#/components/schemas/PaymentMethod'
+      responses:
+        '200':
+          description: Batch result (may be partial)
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: Idempotency conflict
+
+  /batches/{id}:
+    get:
+      tags: [batches]
+      summary: Get payout batch by ID
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Batch with lines
         '404':
           $ref: '#/components/responses/NotFound'
 
@@ -313,6 +371,39 @@ paths:
       responses:
         '200':
           description: Invoice cancelled
+
+  /invoices/{id}/refund:
+    post:
+      tags: [invoices]
+      summary: Refund a paid invoice (full or partial)
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amount, idempotency_key]
+              properties:
+                amount: { type: integer }
+                idempotency_key: { type: string }
+                phone: { type: string }
+                provider: { type: string }
+      responses:
+        '200':
+          description: Refund result
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '402':
+          description: Insufficient wallet balance
 
   /reports/transactions:
     get:

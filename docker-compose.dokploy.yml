@@ -1,0 +1,55 @@
+# Dokploy → Create → Docker Compose
+# Compose path: docker-compose.dokploy.yml
+# Paste env from .env.dokploy.example (use Dokploy-managed Postgres + Redis URLs).
+#
+# Domain: attach to service `relay`, container port 8080.
+#
+# Postgres/Redis are external Dokploy database services — not defined here.
+# Ensure this compose app can resolve those hostnames (same Dokploy project/network).
+
+services:
+  relay:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      REDIS_URL: ${REDIS_URL:?REDIS_URL is required}
+      PORT: "8080"
+      INVOICE_PAY_BASE_URL: ${INVOICE_PAY_BASE_URL:?INVOICE_PAY_BASE_URL is required}
+      PAWAPAY_API_TOKEN: ${PAWAPAY_API_TOKEN:?PAWAPAY_API_TOKEN is required}
+      PAWAPAY_BASE_URL: ${PAWAPAY_BASE_URL:-https://api.pawapay.io}
+      FALLBACK_GATEWAY: ${FALLBACK_GATEWAY:-pawapay}
+      WEBHOOK_SIGNING_SECRET: ${WEBHOOK_SIGNING_SECRET:?WEBHOOK_SIGNING_SECRET is required}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?ADMIN_PASSWORD is required}
+      WALLET_SEED_DEFAULTS_PATH: config/wallet_seed_defaults.json
+      PAY_PAGE_RATE_LIMIT: ${PAY_PAGE_RATE_LIMIT:-10}
+      RUST_LOG: ${RUST_LOG:-payment_relay=info,tower_http=info}
+    ports:
+      - "8080"
+    networks:
+      - relay
+
+  webhook-worker:
+    build:
+      context: ./workers
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      REDIS_URL: ${REDIS_URL:?REDIS_URL is required}
+      WEBHOOK_SIGNING_SECRET: ${WEBHOOK_SIGNING_SECRET:?WEBHOOK_SIGNING_SECRET is required}
+    depends_on:
+      - relay
+    networks:
+      - relay
+
+networks:
+  relay:
+    driver: bridge

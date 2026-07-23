@@ -1,4 +1,5 @@
 pub mod admins;
+pub mod batches;
 pub mod invoices;
 pub mod queries;
 pub mod reports;

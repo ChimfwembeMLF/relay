@@ -24,6 +24,20 @@ pub fn all_countries() -> &'static [CountryEntry] {
     COUNTRIES
 }
 
+/// ISO-2 codes for every catalog country (public register default).
+pub fn register_enabled_countries() -> Vec<String> {
+    COUNTRIES.iter().map(|c| c.iso2.to_string()).collect()
+}
+
+/// Expected wallet count when seeding the full catalog (multi-currency countries expand).
+pub fn register_wallet_seed_count() -> usize {
+    COUNTRIES.iter().map(|c| c.currencies.len()).sum()
+}
+
+pub fn all_iso2() -> Vec<&'static str> {
+    COUNTRIES.iter().map(|c| c.iso2).collect()
+}
+
 pub fn country_by_iso2(iso2: &str) -> Option<&'static CountryEntry> {
     let key = iso2.trim().to_uppercase();
     COUNTRIES.iter().find(|c| c.iso2 == key)

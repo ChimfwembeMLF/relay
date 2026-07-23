@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use crate::catalog;
 use crate::config::WalletSeedDefaults;
 use crate::error::AppError;
 use crate::models::WalletSeedOverride;
@@ -32,6 +33,20 @@ pub fn resolve_seeds_for_countries(
                 amount: ov.amount,
                 source: "override".into(),
             });
+            continue;
+        }
+
+        let amount = defaults.get(country).map(|d| d.amount).unwrap_or(0);
+
+        if let Some(entry) = catalog::country_by_iso2(country) {
+            for &currency in entry.currencies {
+                resolved.push(ResolvedSeed {
+                    country: country.clone(),
+                    currency: currency.to_string(),
+                    amount,
+                    source: "default".into(),
+                });
+            }
         } else if let Some(def) = defaults.get(country) {
             resolved.push(ResolvedSeed {
                 country: country.clone(),
@@ -54,11 +69,7 @@ pub fn resolve_seeds_for_countries(
 }
 
 fn guess_currency(country: &str) -> String {
-    match country {
-        "ZM" => "ZMW".into(),
-        "US" => "USD".into(),
-        "GB" => "GBP".into(),
-        "CA" => "CAD".into(),
-        _ => "USD".into(),
-    }
+    catalog::default_currency(country)
+        .unwrap_or("USD")
+        .to_string()
 }

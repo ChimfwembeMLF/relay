@@ -22,8 +22,8 @@ pub async fn create_system(
         return Err(AppError::Conflict(format!("prefix '{}' already exists", req.prefix)));
     }
 
-    // Public register always enables Zambia only (catalog default).
-    let enabled_countries = vec![crate::catalog::DEFAULT_REGISTER_COUNTRY.to_string()];
+    // Public register enables the full PawaPay catalog (client list ignored).
+    let enabled_countries = crate::catalog::register_enabled_countries();
 
     let api_key = generate_api_key();
     let api_key_hash = hash_api_key(&api_key);

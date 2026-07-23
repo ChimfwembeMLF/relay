@@ -8,6 +8,14 @@
 
 **Input**: User description: "I need batch payouts, also add refunds, and enable all countries on registration"
 
+## Clarifications
+
+### Session 2026-07-23
+
+- Q: Invoice status after refund → A: Keep `paid`; track `refunded_amount` / remaining; fully refunded when remaining is zero (clarify Option B / plan default)
+- Q: Batch processing model → A: Synchronous sequential processing, max 100 lines, partial success (plan R3)
+- Q: Refund destination source → A: Persist payer phone/provider on collect; merchant override if missing (plan R6)
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Registration enables all supported countries (Priority: P1)
@@ -93,9 +101,9 @@ Integrators can create batches and refunds via the same auth model as single pay
 - **FR-004**: Each batch line MUST carry the same commercial fields as a single payout (amount, country, currency, phone, provider/network) and MUST be validated against the catalog and enabled countries.
 - **FR-005**: Batch processing MUST support partial success with per-line outcomes; successful lines MUST debit the correct wallet; failed lines MUST NOT debit.
 - **FR-006**: Batches MUST be idempotent under a batch-level idempotency key (same key + same body → same result; same key + different body → conflict).
-- **FR-007**: Merchants MUST be able to refund a paid invoice in full or in part, limited by remaining refundable amount.
-- **FR-008**: A refund MUST debit the merchant wallet for the invoice’s country/currency and MUST send funds to the customer via mobile money (reuse original collection destination when available).
-- **FR-009**: Refunds MUST be idempotent and MUST reject refunds on non-refundable invoice states or amounts above the remaining refundable balance.
+- **FR-007**: Merchants MUST be able to refund a paid invoice in full or in part, limited by remaining refundable amount (`amount - refunded_amount`). Invoice `status` MUST remain `paid` after partial or full refund; fully refunded is indicated by remaining refundable = 0.
+- **FR-008**: A refund MUST debit the merchant wallet for the invoice’s country/currency and MUST send funds to the customer via mobile money (reuse persisted collect payer phone/provider when available; otherwise merchant-supplied).
+- **FR-009**: Refunds MUST be idempotent and MUST reject refunds on non-refundable invoice states, amounts above the remaining refundable balance, or insufficient wallet balance.
 - **FR-010**: Dashboard MUST provide a batch payout entry experience (multi-row and/or pasteable line list) and a refund action on eligible invoice detail.
 - **FR-011**: Batch line payouts and refund payouts MUST appear in the merchant’s transaction history with clear linkage to batch id and/or invoice reference where applicable.
 - **FR-012**: Existing single-payout behavior MUST remain available and unchanged for one-off sends.
@@ -105,7 +113,7 @@ Integrators can create batches and refunds via the same auth model as single pay
 - **Batch payout**: A merchant-initiated group of payout lines sharing one batch identity and idempotency key; contains many **batch lines**.
 - **Batch line**: One recipient payout attempt within a batch (amount, country, currency, destination, status, linked transaction when created).
 - **Refund**: A money-return against a paid invoice (amount, destination, status, linked payout transaction, remaining-refundable tracking on the invoice).
-- **Invoice (extended)**: Gains refundable/refunded totals (or equivalent) so remaining refund capacity is enforceable.
+- **Invoice (extended)**: Gains `refunded_amount`, payer phone/provider from collect, and derived remaining/fully-refunded flags; primary `status` stays `paid` after refunds.
 - **System (registration)**: `enabled_countries` becomes the full catalog set for new public registrations.
 
 ## Success Criteria *(mandatory)*
@@ -127,5 +135,6 @@ Integrators can create batches and refunds via the same auth model as single pay
 - Refunds are **invoice-based** (paid collections), not arbitrary wallet withdrawals labeled “refund.”
 - Refund money movement reuses the existing payout/gateway path (no separate gateway “refund API” required for v1).
 - Partial batch success is preferred over all-or-nothing.
-- Max batch size will be set in planning to a practical limit (order of tens to low hundreds of lines) to protect the relay.
+- Max batch size is **100** lines; processing is synchronous and sequential.
 - Webhooks for batch lines and refunds reuse existing payout transaction webhook semantics.
+- Invoice status after refund stays **`paid`** with amount tracking (not a new primary status enum).

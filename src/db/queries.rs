@@ -163,7 +163,7 @@ pub async fn get_transaction_by_idempotency(
         r#"
         SELECT id, system_id, wallet_id, external_id, idempotency_key, request_hash,
                amount, currency, country, status, gateway, gateway_reference,
-               gateway_status, error, invoice_id, direction, created_at, updated_at
+               gateway_status, error, invoice_id, direction, batch_id, refund_id, created_at, updated_at
         FROM transactions
         WHERE system_id = $1 AND idempotency_key = $2
         "#,
@@ -184,7 +184,7 @@ pub async fn get_transaction_by_id(
         r#"
         SELECT id, system_id, wallet_id, external_id, idempotency_key, request_hash,
                amount, currency, country, status, gateway, gateway_reference,
-               gateway_status, error, invoice_id, direction, created_at, updated_at
+               gateway_status, error, invoice_id, direction, batch_id, refund_id, created_at, updated_at
         FROM transactions
         WHERE id = $1 AND system_id = $2
         "#,
@@ -207,7 +207,7 @@ pub async fn list_transactions_by_system(
             r#"
             SELECT id, system_id, wallet_id, external_id, idempotency_key, request_hash,
                    amount, currency, country, status, gateway, gateway_reference,
-                   gateway_status, error, invoice_id, direction, created_at, updated_at
+                   gateway_status, error, invoice_id, direction, batch_id, refund_id, created_at, updated_at
             FROM transactions
             WHERE system_id = $1 AND external_id = $2
             ORDER BY created_at DESC
@@ -225,7 +225,7 @@ pub async fn list_transactions_by_system(
             r#"
             SELECT id, system_id, wallet_id, external_id, idempotency_key, request_hash,
                    amount, currency, country, status, gateway, gateway_reference,
-                   gateway_status, error, invoice_id, direction, created_at, updated_at
+                   gateway_status, error, invoice_id, direction, batch_id, refund_id, created_at, updated_at
             FROM transactions
             WHERE system_id = $1
             ORDER BY created_at DESC
@@ -256,6 +256,8 @@ pub struct NewTransaction<'a> {
     pub error: Option<&'a str>,
     pub invoice_id: Option<Uuid>,
     pub direction: &'a str,
+    pub batch_id: Option<Uuid>,
+    pub refund_id: Option<Uuid>,
 }
 
 pub async fn create_transaction_with_debit(
@@ -287,12 +289,12 @@ pub async fn create_transaction_with_debit(
         INSERT INTO transactions (
             system_id, wallet_id, external_id, idempotency_key, request_hash,
             amount, currency, country, status, gateway, gateway_reference,
-            gateway_status, error, invoice_id, direction
+            gateway_status, error, invoice_id, direction, batch_id, refund_id
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
         RETURNING id, system_id, wallet_id, external_id, idempotency_key, request_hash,
                   amount, currency, country, status, gateway, gateway_reference,
-                  gateway_status, error, invoice_id, direction, created_at, updated_at
+                  gateway_status, error, invoice_id, direction, batch_id, refund_id, created_at, updated_at
         "#,
     )
     .bind(tx.system_id)
@@ -310,6 +312,8 @@ pub async fn create_transaction_with_debit(
     .bind(tx.error)
     .bind(tx.invoice_id)
     .bind(tx.direction)
+    .bind(tx.batch_id)
+    .bind(tx.refund_id)
     .fetch_one(&mut *conn)
     .await?;
 

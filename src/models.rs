@@ -94,6 +94,8 @@ pub struct Transaction {
     pub error: Option<String>,
     pub invoice_id: Option<Uuid>,
     pub direction: String,
+    pub batch_id: Option<Uuid>,
+    pub refund_id: Option<Uuid>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -141,7 +143,7 @@ impl From<Transaction> for ProcessPaymentResponse {
 pub struct CreateSystemRequest {
     pub name: String,
     pub prefix: String,
-    /// Ignored on public register — server forces Zambia (`ZM`).
+    /// Ignored on public register — server enables the full catalog.
     #[serde(default)]
     pub enabled_countries: Vec<String>,
     pub webhook_url: Option<String>,
@@ -198,6 +200,9 @@ pub struct Invoice {
     pub paid_at: Option<DateTime<Utc>>,
     pub transaction_id: Option<Uuid>,
     pub qr_payload_url: String,
+    pub refunded_amount: i64,
+    pub payer_phone: Option<String>,
+    pub payer_provider: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -231,9 +236,25 @@ pub struct InvoiceResponse {
     pub transaction_id: Option<Uuid>,
     pub qr_url: String,
     pub qr_code_png_base64: String,
+    pub refunded_amount: i64,
+    pub remaining_refundable: i64,
+    pub fully_refunded: bool,
+    pub payer_phone: Option<String>,
+    pub payer_provider: Option<String>,
 }
 
 impl Invoice {
+    pub fn remaining_refundable(&self) -> i64 {
+        if self.status != "paid" {
+            return 0;
+        }
+        (self.amount - self.refunded_amount).max(0)
+    }
+
+    pub fn fully_refunded(&self) -> bool {
+        self.status == "paid" && self.remaining_refundable() == 0
+    }
+
     pub fn to_response(&self, qr_code_png_base64: String) -> InvoiceResponse {
         InvoiceResponse {
             id: self.id,
@@ -249,6 +270,11 @@ impl Invoice {
             transaction_id: self.transaction_id,
             qr_url: self.qr_payload_url.clone(),
             qr_code_png_base64,
+            refunded_amount: self.refunded_amount,
+            remaining_refundable: self.remaining_refundable(),
+            fully_refunded: self.fully_refunded(),
+            payer_phone: self.payer_phone.clone(),
+            payer_provider: self.payer_provider.clone(),
         }
     }
 }
@@ -294,4 +320,114 @@ pub fn external_id_format_valid(prefix: &str, external_id: &str) -> bool {
         && parts[2].len() == 8
         && parts[2].chars().all(|c| c.is_ascii_digit())
         && !parts[3].is_empty()
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateBatchRequest {
+    pub system_id: Uuid,
+    pub idempotency_key: String,
+    pub lines: Vec<BatchLineRequest>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BatchLineRequest {
+    pub amount: i64,
+    pub currency: String,
+    pub country: String,
+    pub external_id: Option<String>,
+    pub payment_method: PaymentMethod,
+}
+
+#[derive(Debug, Clone, Serialize, FromRow)]
+pub struct PayoutBatch {
+    pub id: Uuid,
+    pub system_id: Uuid,
+    pub idempotency_key: String,
+    #[serde(skip_serializing)]
+    pub request_hash: String,
+    pub status: String,
+    pub line_count: i32,
+    pub success_count: i32,
+    pub failure_count: i32,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, FromRow)]
+pub struct PayoutBatchLine {
+    pub id: Uuid,
+    pub batch_id: Uuid,
+    pub line_index: i32,
+    pub external_id: String,
+    pub amount: i64,
+    pub currency: String,
+    pub country: String,
+    pub phone: String,
+    pub provider: String,
+    pub status: String,
+    pub error: Option<String>,
+    pub transaction_id: Option<Uuid>,
+    pub line_idempotency_key: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct BatchLineResponse {
+    pub line_index: i32,
+    pub status: String,
+    pub transaction_id: Option<Uuid>,
+    pub error: Option<String>,
+    pub external_id: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct BatchResponse {
+    pub id: Uuid,
+    pub status: String,
+    pub success_count: i32,
+    pub failure_count: i32,
+    pub lines: Vec<BatchLineResponse>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateRefundRequest {
+    pub amount: i64,
+    pub idempotency_key: String,
+    pub phone: Option<String>,
+    pub provider: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, FromRow)]
+pub struct Refund {
+    pub id: Uuid,
+    pub system_id: Uuid,
+    pub invoice_id: Uuid,
+    pub amount: i64,
+    pub currency: String,
+    pub country: String,
+    pub phone: String,
+    pub provider: String,
+    pub idempotency_key: String,
+    #[serde(skip_serializing)]
+    pub request_hash: String,
+    pub status: String,
+    pub transaction_id: Option<Uuid>,
+    pub error: Option<String>,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct RefundResponse {
+    pub id: Uuid,
+    pub invoice_id: Uuid,
+    pub amount: i64,
+    pub status: String,
+    pub transaction_id: Option<Uuid>,
+    pub invoice: InvoiceRefundSummary,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct InvoiceRefundSummary {
+    pub refunded_amount: i64,
+    pub remaining_refundable: i64,
+    pub fully_refunded: bool,
+    pub status: String,
 }

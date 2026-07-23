@@ -7,6 +7,9 @@ workers/node_modules/
 **/*.rs.bk
 .env
 .env.local
+.env.prod
+.env.production
+.env.dokploy
 *.log
 .DS_Store
 .idea/

@@ -1,3 +1,14 @@
 {
+  "BJ": { "currency": "XOF", "amount": 0 },
+  "CM": { "currency": "XAF", "amount": 0 },
+  "CI": { "currency": "XOF", "amount": 0 },
+  "CD": { "currency": "CDF", "amount": 0 },
+  "GA": { "currency": "XAF", "amount": 0 },
+  "KE": { "currency": "KES", "amount": 0 },
+  "CG": { "currency": "XAF", "amount": 0 },
+  "RW": { "currency": "RWF", "amount": 0 },
+  "SN": { "currency": "XOF", "amount": 0 },
+  "SL": { "currency": "SLE", "amount": 0 },
+  "UG": { "currency": "UGX", "amount": 0 },
   "ZM": { "currency": "ZMW", "amount": 0 }
 }

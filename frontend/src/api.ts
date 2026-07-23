@@ -147,6 +147,11 @@ export interface Invoice {
   transaction_id?: string | null;
   qr_url: string;
   qr_code_png_base64: string;
+  refunded_amount?: number;
+  remaining_refundable?: number;
+  fully_refunded?: boolean;
+  payer_phone?: string | null;
+  payer_provider?: string | null;
 }
 
 export interface Transaction {
@@ -162,6 +167,8 @@ export interface Transaction {
   created_at?: string;
   gateway_reference?: string | null;
   error?: string | null;
+  batch_id?: string | null;
+  refund_id?: string | null;
 }
 
 export interface ProcessPaymentResponse {
@@ -258,6 +265,70 @@ export function getInvoice(sessionToken: string, reference: string): Promise<Inv
 
 export function cancelInvoice(sessionToken: string, id: string): Promise<void> {
   return apiFetch(`/invoices/${id}/cancel`, { method: "POST", sessionToken });
+}
+
+export interface BatchLineResult {
+  line_index: number;
+  status: string;
+  transaction_id?: string | null;
+  error?: string | null;
+  external_id: string;
+}
+
+export interface BatchResponse {
+  id: string;
+  status: string;
+  success_count: number;
+  failure_count: number;
+  lines: BatchLineResult[];
+}
+
+export function createBatch(
+  sessionToken: string,
+  body: {
+    system_id: string;
+    idempotency_key: string;
+    lines: Array<{
+      amount: number;
+      currency: string;
+      country: string;
+      external_id?: string;
+      payment_method: { type: string; details: Record<string, unknown> };
+    }>;
+  },
+): Promise<BatchResponse> {
+  return apiFetch("/batches", { method: "POST", sessionToken, body });
+}
+
+export function getBatch(sessionToken: string, id: string): Promise<BatchResponse> {
+  return apiFetch(`/batches/${id}`, { sessionToken });
+}
+
+export interface RefundResponse {
+  id: string;
+  invoice_id: string;
+  amount: number;
+  status: string;
+  transaction_id?: string | null;
+  invoice: {
+    refunded_amount: number;
+    remaining_refundable: number;
+    fully_refunded: boolean;
+    status: string;
+  };
+}
+
+export function refundInvoice(
+  sessionToken: string,
+  invoiceId: string,
+  body: {
+    amount: number;
+    idempotency_key: string;
+    phone?: string;
+    provider?: string;
+  },
+): Promise<RefundResponse> {
+  return apiFetch(`/invoices/${invoiceId}/refund`, { method: "POST", sessionToken, body });
 }
 
 export function listTransactions(

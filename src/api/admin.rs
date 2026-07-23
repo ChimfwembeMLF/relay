@@ -69,6 +69,10 @@ pub async fn admin_middleware(
     mut req: Request,
     next: Next,
 ) -> Result<Response, StatusCode> {
+    if crate::api::routes::is_browser_document_request(&req) {
+        return Ok(crate::api::pay_page::serve_spa().await);
+    }
+
     let Some(token) = extract_admin_token(&req) else {
         return Err(StatusCode::UNAUTHORIZED);
     };

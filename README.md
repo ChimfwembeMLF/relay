@@ -69,23 +69,18 @@ cd frontend && npm run dev   # http://localhost:5173/
 
 Configure wallet seed defaults via `WALLET_SEED_DEFAULTS_PATH` or `WALLET_SEED_DEFAULTS_JSON`, set `INVOICE_PAY_BASE_URL` for QR payment links, `PAY_PAGE_RATE_LIMIT` for POST rate limiting, `REDIS_URL` for BullMQ webhook queues, `ADMIN_USERNAME` / `ADMIN_PASSWORD` for the platform backoffice login (`/admin`), and `FALLBACK_GATEWAY=mock` for local dev without pawaPay credentials.
 
-### Production (Dokploy) — same domain
+### Production (Dokploy)
 
-```env
-DATABASE_URL=postgres://USER:PASS@HOST:5432/payment_relay
-REDIS_URL=redis://USER:PASS@HOST:6379
-INVOICE_PAY_BASE_URL=https://payments.tekreminnovations.com
-WEBHOOK_SIGNING_SECRET=<long-random-secret>
-PAWAPAY_API_TOKEN=...
-PAWAPAY_BASE_URL=https://api.pawapay.io
-PORT=8080
-```
+Step-by-step: **[`docs/dokploy.md`](docs/dokploy.md)**
 
-- **One public domain** for UI + API: `https://payments.tekreminnovations.com`
-- **Postgres** + **Redis** in Dokploy (Redis required for queued webhooks)
-- Deploy **Relay API** and **`workers/`** (BullMQ) with the same `REDIS_URL` — see [`workers/README.md`](workers/README.md)
+- Compose file: **`docker-compose.dokploy.yml`**
+- Env paste template: **[`.env.dokploy.example`](.env.dokploy.example)**
+- Domain → service **`relay`**, port **`8080`**
+- Live PawaPay: `PAWAPAY_BASE_URL=https://api.pawapay.io`, `FALLBACK_GATEWAY=pawapay`
 
-Local Redis:
+Also: [`docs/deploy.md`](docs/deploy.md), [`workers/README.md`](workers/README.md)
+
+Local deps:
 
 ```bash
 docker compose up -d postgres redis

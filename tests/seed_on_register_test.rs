@@ -3,25 +3,25 @@ mod common;
 use std::sync::Arc;
 
 use common::{json_request, setup_test_state, test_router};
+use payment_relay::catalog;
 use payment_relay::gateway::mock::MockGateway;
 use uuid::Uuid;
 
 #[tokio::test]
-async fn auto_seeds_zambia_wallet_on_registration() {
+async fn auto_seeds_full_catalog_on_registration() {
     let state = setup_test_state(Arc::new(MockGateway::success())).await;
     let app = test_router(state);
 
     let suffix: String = Uuid::new_v4().to_string()[..4].to_uppercase();
     let prefix = format!("S{suffix}");
     let username = format!("seed_{suffix}").to_lowercase();
-    // Client may request extra countries; public register forces Zambia only.
     let body = format!(
         r#"{{
         "name": "Seed Test",
         "prefix": "{prefix}",
         "username": "{username}",
         "password": "testpass123",
-        "enabled_countries": ["ZM", "US"],
+        "enabled_countries": ["ZM"],
         "webhook_url": "https://example.com/webhook"
     }}"#
     );
@@ -30,7 +30,8 @@ async fn auto_seeds_zambia_wallet_on_registration() {
     assert_eq!(status, axum::http::StatusCode::OK, "register failed: {resp}");
 
     let parsed: serde_json::Value = serde_json::from_str(&resp).unwrap();
-    assert_eq!(parsed["wallets_seeded"].as_u64(), Some(1));
+    let expected = catalog::register_wallet_seed_count() as u64;
+    assert_eq!(parsed["wallets_seeded"].as_u64(), Some(expected));
 
     let system_id = parsed["id"].as_str().unwrap();
     let api_key = parsed["api_key"].as_str().unwrap();
@@ -39,16 +40,27 @@ async fn auto_seeds_zambia_wallet_on_registration() {
         json_request(&app, "GET", &format!("/wallets/{system_id}"), Some(api_key), None).await;
     assert_eq!(status, axum::http::StatusCode::OK);
     let wallets: serde_json::Value = serde_json::from_str(&wallets).unwrap();
-    assert_eq!(wallets.as_array().unwrap().len(), 1);
+    assert_eq!(wallets.as_array().unwrap().len(), expected as usize);
 
     let zm = wallets
         .as_array()
         .unwrap()
         .iter()
-        .find(|w| w["country"] == "ZM")
-        .expect("ZM wallet missing");
-    assert_eq!(zm["currency"], "ZMW");
+        .find(|w| w["country"] == "ZM" && w["currency"] == "ZMW")
+        .expect("ZM/ZMW wallet missing");
     assert_eq!(zm["balance"].as_i64(), Some(0));
+
+    let cd_cdf = wallets
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|w| w["country"] == "CD" && w["currency"] == "CDF");
+    let cd_usd = wallets
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|w| w["country"] == "CD" && w["currency"] == "USD");
+    assert!(cd_cdf.is_some() && cd_usd.is_some());
 }
 
 #[tokio::test]
@@ -82,7 +94,6 @@ async fn wallet_seed_override_takes_precedence() {
         json_request(&app, "GET", &format!("/wallets/{system_id}"), Some(api_key), None).await;
     let wallets: serde_json::Value = serde_json::from_str(&wallets).unwrap();
 
-    assert_eq!(wallets.as_array().unwrap().len(), 1);
     let zm = wallets
         .as_array()
         .unwrap()

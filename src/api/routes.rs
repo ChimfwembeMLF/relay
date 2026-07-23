@@ -1,6 +1,6 @@
 use axum::{
     extract::{Request, State},
-    http::StatusCode,
+    http::{header, Method, StatusCode},
     middleware::{self, Next},
     response::Response,
     routing::{get, patch, post},
@@ -11,10 +11,12 @@ use uuid::Uuid;
 
 use crate::api::admin;
 use crate::api::auth as merchant_auth;
+use crate::api::batches;
 use crate::api::docs;
 use crate::api::invoices;
 use crate::api::pay_page;
 use crate::api::payments;
+use crate::api::refunds;
 use crate::api::reports;
 use crate::api::systems;
 use crate::api::wallets;
@@ -44,13 +46,19 @@ pub fn create_router(state: AppState) -> Router {
         .nest_service("/assets", ServeDir::new("frontend/dist/assets"))
         .route_service("/favicon.svg", ServeFile::new("frontend/dist/favicon.svg"))
         .route_service("/logo-blue.png", ServeFile::new("frontend/dist/logo-blue.png"))
-        .route_service("/logo.png", ServeFile::new("frontend/dist/logo.png"));
+        .route_service("/logo.png", ServeFile::new("frontend/dist/logo.png"))
+        .route_service(
+            "/register-hero.jpg",
+            ServeFile::new("frontend/dist/register-hero.jpg"),
+        );
 
     let public = docs::mount(public);
 
     let protected = Router::new()
         .route("/payments", post(payments::process_payment))
         .route("/payments/:id", get(payments::get_payment))
+        .route("/batches", post(batches::create_batch))
+        .route("/batches/:id", get(batches::get_batch))
         .route("/wallets/:system_id", get(wallets::list_wallets))
         .route("/transactions/:system_id", get(payments::list_transactions))
         .route(
@@ -63,6 +71,7 @@ pub fn create_router(state: AppState) -> Router {
         )
         .route("/invoices/:id/collect", post(invoices::collect_invoice))
         .route("/invoices/:id/cancel", post(invoices::cancel_invoice_handler))
+        .route("/invoices/:id/refund", post(refunds::create_refund))
         .route("/reports/transactions", get(reports::transactions_report))
         .route("/reports/wallets", get(reports::wallets_report))
         .route("/reports/invoices", get(reports::invoices_report))
@@ -94,11 +103,35 @@ pub fn create_router(state: AppState) -> Router {
         .with_state(state)
 }
 
+/// Browser navigations (refresh / open URL) send `Accept: text/html…`.
+/// API clients send `Accept: application/json`. SPA paths like `/payments` and
+/// `/invoices` share URLs with the API — without this, auth middleware returns
+/// 401 before the SPA fallback can run.
+pub(crate) fn is_browser_document_request(req: &Request) -> bool {
+    if req.method() != Method::GET {
+        return false;
+    }
+    let Some(accept) = req.headers().get(header::ACCEPT).and_then(|v| v.to_str().ok()) else {
+        return false;
+    };
+    let html = accept.find("text/html");
+    let json = accept.find("application/json");
+    match (html, json) {
+        (Some(h), Some(j)) => h < j,
+        (Some(_), None) => true,
+        _ => false,
+    }
+}
+
 async fn auth_middleware(
     State(state): State<AppState>,
     mut req: Request,
     next: Next,
 ) -> Result<Response, StatusCode> {
+    if is_browser_document_request(&req) {
+        return Ok(pay_page::serve_spa().await);
+    }
+
     let system = if let Some(api_key) = req
         .headers()
         .get("X-API-Key")

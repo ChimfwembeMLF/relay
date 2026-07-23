@@ -31,18 +31,14 @@ docker compose --profile workers up webhook-worker
 
 ## Dokploy
 
-1. Create **Postgres** → set `DATABASE_URL`
-2. Create **Redis** → set `REDIS_URL=redis://...` on **both** the Relay API and this worker
-3. Deploy **Relay API** (Rust) with:
-   ```env
-   DATABASE_URL=postgres://...
-   REDIS_URL=redis://...
-   INVOICE_PAY_BASE_URL=https://payments.tekreminnovations.com
-   WEBHOOK_SIGNING_SECRET=...
-   ```
-4. Deploy **webhook-worker** (`workers/`) as a second app with the same `REDIS_URL`
+Use the all-in-one compose stack: [`docs/dokploy.md`](../docs/dokploy.md) (`docker-compose.dokploy.yml`).
 
-Same Redis instance for API + worker. No separate Redis DB index required unless you isolate envs (`redis://host:6379/0`).
+That deploys API + this worker together. If you split apps instead:
+
+1. Create **Postgres** → set `DATABASE_URL` on the API
+2. Create **Redis** → set `REDIS_URL` on **both** API and this worker
+3. Deploy API with root `Dockerfile`
+4. Deploy this folder with `workers/Dockerfile` and the same `REDIS_URL` / `WEBHOOK_SIGNING_SECRET`
 
 ## Job payload
 

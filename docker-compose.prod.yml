@@ -1,0 +1,74 @@
+# Production-style stack (VPS or local smoke test).
+# Usage:
+#   cp .env.production.example .env.prod   # fill secrets
+#   docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-relay}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-payment_relay}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-relay} -d ${POSTGRES_DB:-payment_relay}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  relay:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "${PORT:-8080}:8080"
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      PORT: "8080"
+      INVOICE_PAY_BASE_URL: ${INVOICE_PAY_BASE_URL:?}
+      PAWAPAY_API_TOKEN: ${PAWAPAY_API_TOKEN:?}
+      PAWAPAY_BASE_URL: ${PAWAPAY_BASE_URL:-https://api.pawapay.io}
+      FALLBACK_GATEWAY: ${FALLBACK_GATEWAY:-pawapay}
+      WEBHOOK_SIGNING_SECRET: ${WEBHOOK_SIGNING_SECRET:?}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?}
+      WALLET_SEED_DEFAULTS_PATH: config/wallet_seed_defaults.json
+      PAY_PAGE_RATE_LIMIT: ${PAY_PAGE_RATE_LIMIT:-10}
+      RUST_LOG: ${RUST_LOG:-payment_relay=info,tower_http=info}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  webhook-worker:
+    build:
+      context: ./workers
+    restart: unless-stopped
+    environment:
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      WEBHOOK_SIGNING_SECRET: ${WEBHOOK_SIGNING_SECRET:?}
+    depends_on:
+      redis:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  redis_data:

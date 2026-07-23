@@ -26,7 +26,8 @@ pub async fn create_invoice(
         )
         VALUES ($1, $2, $3, $4, $5, $6, 'open', $7, $8)
         RETURNING id, system_id, reference, description, amount, currency, country,
-                  status, expires_at, paid_at, transaction_id, qr_payload_url, created_at, updated_at
+                  status, expires_at, paid_at, transaction_id, qr_payload_url,
+                  refunded_amount, payer_phone, payer_provider, created_at, updated_at
         "#,
     )
     .bind(system_id)
@@ -46,7 +47,8 @@ pub async fn get_invoice_by_reference_public(pool: &PgPool, reference: &str) -> 
     let invoice = sqlx::query_as::<_, Invoice>(
         r#"
         SELECT id, system_id, reference, description, amount, currency, country,
-               status, expires_at, paid_at, transaction_id, qr_payload_url, created_at, updated_at
+               status, expires_at, paid_at, transaction_id, qr_payload_url,
+               refunded_amount, payer_phone, payer_provider, created_at, updated_at
         FROM invoices WHERE reference = $1
         "#,
     )
@@ -62,7 +64,8 @@ pub async fn get_invoice_by_id(pool: &PgPool, id: Uuid, system_id: Uuid) -> Resu
     let invoice = sqlx::query_as::<_, Invoice>(
         r#"
         SELECT id, system_id, reference, description, amount, currency, country,
-               status, expires_at, paid_at, transaction_id, qr_payload_url, created_at, updated_at
+               status, expires_at, paid_at, transaction_id, qr_payload_url,
+               refunded_amount, payer_phone, payer_provider, created_at, updated_at
         FROM invoices WHERE id = $1 AND system_id = $2
         "#,
     )
@@ -83,7 +86,8 @@ pub async fn get_invoice_by_reference(
     let invoice = sqlx::query_as::<_, Invoice>(
         r#"
         SELECT id, system_id, reference, description, amount, currency, country,
-               status, expires_at, paid_at, transaction_id, qr_payload_url, created_at, updated_at
+               status, expires_at, paid_at, transaction_id, qr_payload_url,
+               refunded_amount, payer_phone, payer_provider, created_at, updated_at
         FROM invoices WHERE reference = $1 AND system_id = $2
         "#,
     )
@@ -106,7 +110,8 @@ pub async fn list_invoices(
         sqlx::query_as::<_, Invoice>(
             r#"
             SELECT id, system_id, reference, description, amount, currency, country,
-                   status, expires_at, paid_at, transaction_id, qr_payload_url, created_at, updated_at
+                   status, expires_at, paid_at, transaction_id, qr_payload_url,
+                   refunded_amount, payer_phone, payer_provider, created_at, updated_at
             FROM invoices WHERE system_id = $1 AND status = $2
             ORDER BY created_at DESC LIMIT $3
             "#,
@@ -120,7 +125,8 @@ pub async fn list_invoices(
         sqlx::query_as::<_, Invoice>(
             r#"
             SELECT id, system_id, reference, description, amount, currency, country,
-                   status, expires_at, paid_at, transaction_id, qr_payload_url, created_at, updated_at
+                   status, expires_at, paid_at, transaction_id, qr_payload_url,
+                   refunded_amount, payer_phone, payer_provider, created_at, updated_at
             FROM invoices WHERE system_id = $1
             ORDER BY created_at DESC LIMIT $2
             "#,
@@ -149,7 +155,8 @@ async fn get_invoice_row(pool: &PgPool, id: Uuid) -> Result<Invoice, AppError> {
     sqlx::query_as::<_, Invoice>(
         r#"
         SELECT id, system_id, reference, description, amount, currency, country,
-               status, expires_at, paid_at, transaction_id, qr_payload_url, created_at, updated_at
+               status, expires_at, paid_at, transaction_id, qr_payload_url,
+               refunded_amount, payer_phone, payer_provider, created_at, updated_at
         FROM invoices WHERE id = $1
         "#,
     )
@@ -178,17 +185,49 @@ pub async fn mark_invoice_paid(
     pool: &PgPool,
     invoice_id: Uuid,
     transaction_id: Uuid,
+    payer_phone: Option<&str>,
+    payer_provider: Option<&str>,
 ) -> Result<Invoice, AppError> {
     sqlx::query(
         r#"
-        UPDATE invoices SET status = 'paid', paid_at = NOW(), transaction_id = $2, updated_at = NOW()
+        UPDATE invoices SET status = 'paid', paid_at = NOW(), transaction_id = $2,
+            payer_phone = COALESCE($3, payer_phone),
+            payer_provider = COALESCE($4, payer_provider),
+            updated_at = NOW()
         WHERE id = $1
         "#,
     )
     .bind(invoice_id)
     .bind(transaction_id)
+    .bind(payer_phone)
+    .bind(payer_provider)
     .execute(pool)
     .await?;
+    get_invoice_row(pool, invoice_id).await
+}
+
+pub async fn apply_refund_amount(
+    pool: &PgPool,
+    invoice_id: Uuid,
+    amount: i64,
+) -> Result<Invoice, AppError> {
+    let updated = sqlx::query(
+        r#"
+        UPDATE invoices
+        SET refunded_amount = refunded_amount + $2, updated_at = NOW()
+        WHERE id = $1 AND status = 'paid' AND refunded_amount + $2 <= amount
+        "#,
+    )
+    .bind(invoice_id)
+    .bind(amount)
+    .execute(pool)
+    .await?;
+
+    if updated.rows_affected() == 0 {
+        return Err(AppError::Validation(
+            "refund amount exceeds remaining refundable balance".into(),
+        ));
+    }
     get_invoice_row(pool, invoice_id).await
 }
 
@@ -213,12 +252,12 @@ pub async fn create_deposit_with_credit(
         INSERT INTO transactions (
             system_id, wallet_id, external_id, idempotency_key, request_hash,
             amount, currency, country, status, gateway, gateway_reference,
-            gateway_status, error, invoice_id, direction
+            gateway_status, error, invoice_id, direction, batch_id, refund_id
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
         RETURNING id, system_id, wallet_id, external_id, idempotency_key, request_hash,
                   amount, currency, country, status, gateway, gateway_reference,
-                  gateway_status, error, invoice_id, direction, created_at, updated_at
+                  gateway_status, error, invoice_id, direction, batch_id, refund_id, created_at, updated_at
         "#,
     )
     .bind(tx.system_id)
@@ -236,6 +275,8 @@ pub async fn create_deposit_with_credit(
     .bind(tx.error)
     .bind(tx.invoice_id)
     .bind(tx.direction)
+    .bind(tx.batch_id)
+    .bind(tx.refund_id)
     .fetch_one(&mut *conn)
     .await?;
 
