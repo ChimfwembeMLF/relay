@@ -30,7 +30,9 @@ Use `postgres://…` for `DATABASE_URL` (convert from `postgresql://` if needed)
 
 ## 4. Networking
 
-Compose must reach Dokploy DB hostnames (e.g. `tekrem-payments-…`). Keep the Compose app and the Postgres/Redis services in the **same Dokploy project**. If DNS fails, attach the compose stack to the database network in Dokploy advanced settings.
+Dokploy Postgres/Redis live on **`dokploy-network`**. This compose file joins that network (`external: true`) so hosts like `tekrem-payments-tynhbu` resolve.
+
+Keep the Compose app and the database services in the **same Dokploy project**. Use the internal URLs Dokploy shows for each database (not `localhost`).
 
 ## 5. Deploy + smoke test
 

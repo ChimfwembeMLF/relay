@@ -1,16 +1,11 @@
-# Dokploy → Create → Docker Compose
-# Compose path: docker-compose.dokploy.yml
-# Paste env from .env.dokploy.example (use Dokploy-managed Postgres + Redis URLs).
+# Dokploy → Compose file: docker-compose.dokploy.yml
+# Domain → service `relay`, port 8080
 #
-# Domain: attach to service `relay`, container port 8080.
-#
-# Postgres/Redis are external Dokploy database services — not defined here.
-# Ensure this compose app can resolve those hostnames (same Dokploy project/network).
+# Joins `dokploy-network` so DATABASE_URL / REDIS_URL hostnames
+# (Dokploy Postgres + Redis services) resolve.
 
 services:
-  # Public API + SPA — pick THIS service for Domains (port 8080)
   relay:
-    container_name: relay
     build:
       context: .
       dockerfile: Dockerfile
@@ -33,12 +28,11 @@ services:
       PAY_PAGE_RATE_LIMIT: ${PAY_PAGE_RATE_LIMIT:-10}
       RUST_LOG: ${RUST_LOG:-payment_relay=info,tower_http=info}
     ports:
-      - "8080:8080"
+      - "8080"
     networks:
-      - relay
+      - dokploy-network
 
   webhook-worker:
-    container_name: webhook-worker
     build:
       context: ./workers
       dockerfile: Dockerfile
@@ -51,8 +45,8 @@ services:
     depends_on:
       - relay
     networks:
-      - relay
+      - dokploy-network
 
 networks:
-  relay:
-    driver: bridge
+  dokploy-network:
+    external: true
