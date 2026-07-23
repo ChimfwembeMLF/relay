@@ -8,7 +8,9 @@
 # Ensure this compose app can resolve those hostnames (same Dokploy project/network).
 
 services:
+  # Public API + SPA — pick THIS service for Domains (port 8080)
   relay:
+    container_name: relay
     build:
       context: .
       dockerfile: Dockerfile
@@ -31,11 +33,12 @@ services:
       PAY_PAGE_RATE_LIMIT: ${PAY_PAGE_RATE_LIMIT:-10}
       RUST_LOG: ${RUST_LOG:-payment_relay=info,tower_http=info}
     ports:
-      - "8080"
+      - "8080:8080"
     networks:
       - relay
 
   webhook-worker:
+    container_name: webhook-worker
     build:
       context: ./workers
       dockerfile: Dockerfile
