@@ -1,20 +1,8 @@
 # Dokploy → Compose file: docker-compose.dokploy.yml
 # Domain → service `relay`, port 8080
 #
-# Postgres + Redis run in this stack (reliable DNS via service names).
-# You can stop the separate Dokploy Postgres/Redis apps if they were only for Relay.
-#
-# Environment (paste into Dokploy → Environment):
-#   POSTGRES_PASSWORD=...
-#   DATABASE_URL=postgres://relay:SAME_PASSWORD@postgres:5432/payment_relay
-#   REDIS_URL=redis://redis:6379
-#   INVOICE_PAY_BASE_URL=https://your-domain
-#   PAWAPAY_API_TOKEN=...
-#   PAWAPAY_BASE_URL=https://api.pawapay.io
-#   FALLBACK_GATEWAY=pawapay
-#   WEBHOOK_SIGNING_SECRET=...
-#   ADMIN_USERNAME=admin
-#   ADMIN_PASSWORD=...
+# Postgres + Redis are in this stack. DATABASE_URL / REDIS_URL are forced
+# to service hosts `postgres` / `redis` (ignores old Dokploy DB hostnames).
 
 services:
   postgres:
@@ -22,7 +10,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-relay}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-RelayPg_ChangeMe_9f3a2c}
       POSTGRES_DB: ${POSTGRES_DB:-payment_relay}
     volumes:
       - relay_pg:/var/lib/postgresql/data
@@ -59,8 +47,9 @@ services:
     env_file:
       - .env
     environment:
-      DATABASE_URL: ${DATABASE_URL:-postgres://relay:${POSTGRES_PASSWORD}@postgres:5432/payment_relay}
-      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      # Force in-stack DB/Redis — do not use external Dokploy DB hostnames
+      DATABASE_URL: postgres://${POSTGRES_USER:-relay}:${POSTGRES_PASSWORD:-RelayPg_ChangeMe_9f3a2c}@postgres:5432/${POSTGRES_DB:-payment_relay}
+      REDIS_URL: redis://redis:6379
       PORT: "8080"
       INVOICE_PAY_BASE_URL: ${INVOICE_PAY_BASE_URL:?INVOICE_PAY_BASE_URL is required}
       PAWAPAY_API_TOKEN: ${PAWAPAY_API_TOKEN:?PAWAPAY_API_TOKEN is required}
@@ -81,7 +70,6 @@ services:
         condition: service_healthy
     networks:
       - internal
-      # Traefik / Domains (optional if Dokploy auto-attaches)
       - dokploy-network
 
   webhook-worker:
@@ -92,7 +80,7 @@ services:
     env_file:
       - .env
     environment:
-      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      REDIS_URL: redis://redis:6379
       WEBHOOK_SIGNING_SECRET: ${WEBHOOK_SIGNING_SECRET:?WEBHOOK_SIGNING_SECRET is required}
     depends_on:
       redis:
