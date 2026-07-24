@@ -1,8 +1,7 @@
-# Dokploy → Compose file: docker-compose.dokploy.yml
+# Relay Dokploy stack — relay + webhook-worker only (no postgres/redis services)
+# Compose path in Dokploy: docker-compose.dokploy.yml
 # Domain → service `relay`, port 8080
-#
-# Uses your Dokploy Postgres/Redis URLs (DATABASE_URL + REDIS_URL).
-# Joins dokploy-network so those internal hostnames resolve.
+# Requires external network: dokploy-network
 
 services:
   relay:
