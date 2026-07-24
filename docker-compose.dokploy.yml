@@ -1,43 +1,10 @@
 # Dokploy → Compose file: docker-compose.dokploy.yml
 # Domain → service `relay`, port 8080
 #
-# Postgres + Redis are in this stack. DATABASE_URL / REDIS_URL are forced
-# to service hosts `postgres` / `redis` (ignores old Dokploy DB hostnames).
+# Uses your Dokploy Postgres/Redis URLs (DATABASE_URL + REDIS_URL).
+# Joins dokploy-network so those internal hostnames resolve.
 
 services:
-  postgres:
-    image: postgres:15-alpine
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-relay}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-RelayPg_ChangeMe_9f3a2c}
-      POSTGRES_DB: ${POSTGRES_DB:-payment_relay}
-    volumes:
-      - relay_pg:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U relay -d payment_relay"]
-      interval: 5s
-      timeout: 5s
-      retries: 20
-      start_period: 10s
-    networks:
-      - internal
-
-  redis:
-    image: redis:7-alpine
-    restart: unless-stopped
-    command: ["redis-server", "--appendonly", "yes"]
-    volumes:
-      - relay_redis:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 20
-      start_period: 5s
-    networks:
-      - internal
-
   relay:
     build:
       context: .
@@ -47,9 +14,8 @@ services:
     env_file:
       - .env
     environment:
-      # Force in-stack DB/Redis — do not use external Dokploy DB hostnames
-      DATABASE_URL: postgres://${POSTGRES_USER:-relay}:${POSTGRES_PASSWORD:-RelayPg_ChangeMe_9f3a2c}@postgres:5432/${POSTGRES_DB:-payment_relay}
-      REDIS_URL: redis://redis:6379
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL to your Dokploy Postgres URL}
+      REDIS_URL: ${REDIS_URL:?set REDIS_URL to your Dokploy Redis URL}
       PORT: "8080"
       INVOICE_PAY_BASE_URL: ${INVOICE_PAY_BASE_URL:?INVOICE_PAY_BASE_URL is required}
       PAWAPAY_API_TOKEN: ${PAWAPAY_API_TOKEN:?PAWAPAY_API_TOKEN is required}
@@ -63,13 +29,7 @@ services:
       RUST_LOG: ${RUST_LOG:-payment_relay=info,tower_http=info}
     ports:
       - "8080"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
     networks:
-      - internal
       - dokploy-network
 
   webhook-worker:
@@ -80,22 +40,13 @@ services:
     env_file:
       - .env
     environment:
-      REDIS_URL: redis://redis:6379
+      REDIS_URL: ${REDIS_URL:?set REDIS_URL to your Dokploy Redis URL}
       WEBHOOK_SIGNING_SECRET: ${WEBHOOK_SIGNING_SECRET:?WEBHOOK_SIGNING_SECRET is required}
     depends_on:
-      redis:
-        condition: service_healthy
-      relay:
-        condition: service_started
+      - relay
     networks:
-      - internal
-
-volumes:
-  relay_pg:
-  relay_redis:
+      - dokploy-network
 
 networks:
-  internal:
-    driver: bridge
   dokploy-network:
     external: true
