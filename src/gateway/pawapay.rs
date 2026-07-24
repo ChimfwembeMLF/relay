@@ -18,7 +18,7 @@ impl PawapayGateway {
     pub fn new(base_url: String, api_token: String) -> Self {
         Self {
             client: Client::builder()
-                .timeout(Duration::from_secs(30))
+                .timeout(Duration::from_secs(20))
                 .build()
                 .expect("failed to build HTTP client"),
             base_url,
@@ -97,10 +97,20 @@ impl PaymentGateway for PawapayGateway {
             match response {
                 Ok(resp) => {
                     let status_code = resp.status();
-                    let body: PawapayResponse = resp
-                        .json()
-                        .await
-                        .map_err(|e| AppError::Gateway(format!("invalid gateway response: {e}")))?;
+                    let body_text = resp.text().await.map_err(|e| {
+                        AppError::Gateway(format!("failed to read gateway response: {e}"))
+                    })?;
+
+                    let body: PawapayResponse = serde_json::from_str(&body_text).map_err(|e| {
+                        tracing::warn!(
+                            status = %status_code,
+                            body = %body_text,
+                            "pawapay payout response parse failed"
+                        );
+                        AppError::Gateway(format!(
+                            "invalid gateway response ({status_code}): {e}"
+                        ))
+                    })?;
 
                     let success = matches!(
                         body.status.as_str(),
@@ -114,6 +124,16 @@ impl PaymentGateway for PawapayGateway {
                             success: true,
                             error: None,
                         });
+                    }
+
+                    if let Some(reason) = &body.failure_reason {
+                        tracing::warn!(
+                            payout_id = %request.payout_id,
+                            failure_code = %reason.failure_code,
+                            failure_message = %reason.failure_message,
+                            http_status = %status_code,
+                            "pawapay payout rejected"
+                        );
                     }
 
                     if Self::is_retryable(status_code, &body) && attempt < 2 {
@@ -202,10 +222,20 @@ impl PawapayGateway {
             match response {
                 Ok(resp) => {
                     let status_code = resp.status();
-                    let body: PawapayResponse = resp
-                        .json()
-                        .await
-                        .map_err(|e| AppError::Gateway(format!("invalid gateway response: {e}")))?;
+                    let body_text = resp.text().await.map_err(|e| {
+                        AppError::Gateway(format!("failed to read gateway response: {e}"))
+                    })?;
+
+                    let body: PawapayResponse = serde_json::from_str(&body_text).map_err(|e| {
+                        tracing::warn!(
+                            status = %status_code,
+                            body = %body_text,
+                            "pawapay deposit response parse failed"
+                        );
+                        AppError::Gateway(format!(
+                            "invalid gateway response ({status_code}): {e}"
+                        ))
+                    })?;
 
                     let success = matches!(
                         body.status.as_str(),
@@ -219,6 +249,16 @@ impl PawapayGateway {
                             success: true,
                             error: None,
                         });
+                    }
+
+                    if let Some(reason) = &body.failure_reason {
+                        tracing::warn!(
+                            deposit_id = %fallback_id,
+                            failure_code = %reason.failure_code,
+                            failure_message = %reason.failure_message,
+                            http_status = %status_code,
+                            "pawapay deposit rejected"
+                        );
                     }
 
                     if Self::is_retryable(status_code, &body) && attempt < 2 {
@@ -270,18 +310,29 @@ fn format_pawapay_amount(amount_minor: i64) -> String {
 fn build_recipient(method: &crate::models::PaymentMethod) -> Result<serde_json::Value, AppError> {
     match method.method_type.as_str() {
         "mmo" => {
-            // Normalize phone → phoneNumber for PawaPay accountDetails.
-            let mut details = method.details.clone();
-            if details.get("phoneNumber").and_then(|v| v.as_str()).is_none() {
-                if let Some(phone) = details.get("phone").cloned() {
-                    details
-                        .as_object_mut()
-                        .map(|o| o.insert("phoneNumber".into(), phone));
-                }
-            }
+            let details = &method.details;
+            let phone = details
+                .get("phoneNumber")
+                .or_else(|| details.get("phone"))
+                .and_then(|v| v.as_str())
+                .map(normalize_msisdn)
+                .filter(|s| !s.is_empty())
+                .ok_or_else(|| {
+                    AppError::Validation("phoneNumber is required for mobile money".into())
+                })?;
+            let provider = details
+                .get("provider")
+                .and_then(|v| v.as_str())
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .ok_or_else(|| AppError::Validation("provider is required for mobile money".into()))?;
+
             Ok(serde_json::json!({
                 "type": "MMO",
-                "accountDetails": details
+                "accountDetails": {
+                    "phoneNumber": phone,
+                    "provider": provider
+                }
             }))
         }
         other => Err(AppError::Validation(format!(
@@ -290,9 +341,18 @@ fn build_recipient(method: &crate::models::PaymentMethod) -> Result<serde_json::
     }
 }
 
+/// MSISDN: digits only; strip `00` international prefix. Full country code required (e.g. 260…).
+fn normalize_msisdn(raw: &str) -> String {
+    let digits: String = raw.chars().filter(|c| c.is_ascii_digit()).collect();
+    if let Some(rest) = digits.strip_prefix("00") {
+        return rest.to_string();
+    }
+    digits
+}
+
 #[cfg(test)]
 mod tests {
-    use super::format_pawapay_amount;
+    use super::{format_pawapay_amount, normalize_msisdn};
 
     #[test]
     fn formats_minor_units_as_major_string() {
@@ -300,5 +360,12 @@ mod tests {
         assert_eq!(format_pawapay_amount(1500), "15");
         assert_eq!(format_pawapay_amount(1505), "15.05");
         assert_eq!(format_pawapay_amount(1), "0.01");
+    }
+
+    #[test]
+    fn normalizes_msisdn() {
+        assert_eq!(normalize_msisdn("+260 973 456 789"), "260973456789");
+        assert_eq!(normalize_msisdn("00260973456789"), "260973456789");
+        assert_eq!(normalize_msisdn("260973456789"), "260973456789");
     }
 }
