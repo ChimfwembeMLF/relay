@@ -1,10 +1,55 @@
 # Dokploy → Compose file: docker-compose.dokploy.yml
 # Domain → service `relay`, port 8080
 #
-# Joins `dokploy-network` so DATABASE_URL / REDIS_URL hostnames
-# (Dokploy Postgres + Redis services) resolve.
+# Postgres + Redis run in this stack (reliable DNS via service names).
+# You can stop the separate Dokploy Postgres/Redis apps if they were only for Relay.
+#
+# Environment (paste into Dokploy → Environment):
+#   POSTGRES_PASSWORD=...
+#   DATABASE_URL=postgres://relay:SAME_PASSWORD@postgres:5432/payment_relay
+#   REDIS_URL=redis://redis:6379
+#   INVOICE_PAY_BASE_URL=https://your-domain
+#   PAWAPAY_API_TOKEN=...
+#   PAWAPAY_BASE_URL=https://api.pawapay.io
+#   FALLBACK_GATEWAY=pawapay
+#   WEBHOOK_SIGNING_SECRET=...
+#   ADMIN_USERNAME=admin
+#   ADMIN_PASSWORD=...
 
 services:
+  postgres:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-relay}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:-payment_relay}
+    volumes:
+      - relay_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U relay -d payment_relay"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    networks:
+      - internal
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - relay_redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+    networks:
+      - internal
+
   relay:
     build:
       context: .
@@ -14,8 +59,8 @@ services:
     env_file:
       - .env
     environment:
-      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
-      REDIS_URL: ${REDIS_URL:?REDIS_URL is required}
+      DATABASE_URL: ${DATABASE_URL:-postgres://relay:${POSTGRES_PASSWORD}@postgres:5432/payment_relay}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       PORT: "8080"
       INVOICE_PAY_BASE_URL: ${INVOICE_PAY_BASE_URL:?INVOICE_PAY_BASE_URL is required}
       PAWAPAY_API_TOKEN: ${PAWAPAY_API_TOKEN:?PAWAPAY_API_TOKEN is required}
@@ -29,7 +74,14 @@ services:
       RUST_LOG: ${RUST_LOG:-payment_relay=info,tower_http=info}
     ports:
       - "8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
+      - internal
+      # Traefik / Domains (optional if Dokploy auto-attaches)
       - dokploy-network
 
   webhook-worker:
@@ -40,13 +92,22 @@ services:
     env_file:
       - .env
     environment:
-      REDIS_URL: ${REDIS_URL:?REDIS_URL is required}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       WEBHOOK_SIGNING_SECRET: ${WEBHOOK_SIGNING_SECRET:?WEBHOOK_SIGNING_SECRET is required}
     depends_on:
-      - relay
+      redis:
+        condition: service_healthy
+      relay:
+        condition: service_started
     networks:
-      - dokploy-network
+      - internal
+
+volumes:
+  relay_pg:
+  relay_redis:
 
 networks:
+  internal:
+    driver: bridge
   dokploy-network:
     external: true

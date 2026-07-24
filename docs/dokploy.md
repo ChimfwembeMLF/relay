@@ -1,41 +1,34 @@
 # Dokploy deployment
 
-Compose file: **`docker-compose.dokploy.yml`** → services **`relay`** + **`webhook-worker`**.
+Compose file: **`docker-compose.dokploy.yml`**
 
-Postgres and Redis come from **Dokploy database services** (set `DATABASE_URL` / `REDIS_URL`).
+Services: **`postgres`**, **`redis`**, **`relay`**, **`webhook-worker`**
 
-## 1. Create databases
+Domain → **`relay`** port **`8080`**
 
-In the same Dokploy project:
+## Environment
 
-1. Create a **PostgreSQL** database
-2. Create a **Redis** instance
-3. Copy their internal connection URLs
+Paste from [`.env.dokploy.example`](../.env.dokploy.example). Critical:
 
-## 2. Create the Compose app
+```env
+POSTGRES_PASSWORD=your-strong-password
+DATABASE_URL=postgres://relay:your-strong-password@postgres:5432/payment_relay
+REDIS_URL=redis://redis:6379
+```
 
-1. **Create** → **Docker Compose**
-2. Connect this Git repo
-3. Compose file: `docker-compose.dokploy.yml`
-4. **Environment**: paste from [`.env.dokploy.example`](../.env.dokploy.example) and fill real URLs/secrets
+Use hosts **`postgres`** and **`redis`** (compose service names). Do **not** use Dokploy database app hostnames like `tekrem-payments-tynhbu` with this compose file.
 
-Use `postgres://…` for `DATABASE_URL` (convert from `postgresql://` if needed).
+Also set: `INVOICE_PAY_BASE_URL`, `PAWAPAY_API_TOKEN`, `WEBHOOK_SIGNING_SECRET`, `ADMIN_PASSWORD`.
 
-## 3. Domain
+## Why not separate Dokploy DB apps?
 
-- Service: **`relay`**
-- Port: **`8080`**
-- HTTPS on
-- Set `INVOICE_PAY_BASE_URL` to that exact origin (no trailing slash)
+Compose containers often cannot resolve Dokploy database hostnames. Bundling Postgres/Redis in the same compose stack avoids that.
 
-## 4. Networking
+You can stop/remove the unused Dokploy Postgres/Redis services for this project after this stack is healthy.
 
-Dokploy Postgres/Redis live on **`dokploy-network`**. This compose file joins that network (`external: true`) so hosts like `tekrem-payments-tynhbu` resolve.
+## Deploy
 
-Keep the Compose app and the database services in the **same Dokploy project**. Use the internal URLs Dokploy shows for each database (not `localhost`).
-
-## 5. Deploy + smoke test
-
-Deploy, then check `/`, `/swagger-ui/`, `/admin`, and a pay link.
-
-Still fill before go-live: `PAWAPAY_API_TOKEN`, `WEBHOOK_SIGNING_SECRET`, `ADMIN_PASSWORD`.
+1. Compose path: `docker-compose.dokploy.yml`
+2. Set Environment
+3. Deploy (first Rust build is slow)
+4. Open `/`, `/swagger-ui/`, `/admin`
